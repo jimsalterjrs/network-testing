@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# usage: fetchrate [url] [ratelimit] [seconds] [format]
+# usage: fetchrate -u [url] -r [ratelimit in Mbps, default 99999] -t [seconds to run test, default 30] -p [throttle period in ms, default 50] -o [outputfile]
 #
 # fetchrate will fetch $ARGV[0] at a maximum rate of $ARGV[1] Mbps
 # for $ARGV[2] seconds total, at the end of which it will return 
@@ -11,19 +11,23 @@
 # format instead of human-readable format.
 
 use strict;
-
-if ((scalar @ARGV) < 3) { printusage(); exit 0; }
-
 use Time::HiRes qw ( usleep gettimeofday );
 use LWP::Simple;
 use List::Util qw ( sum min max );
 
-my $url = $ARGV[0];
+# process command line arguments
+my %args = getargs(@ARGV);
+
+if ($args{'usage'}) { printusage(); exit; }
+
+my $url = $args{'u'};
+
+my $outputfile = $args{'o'};
 
 # we're going to track the rate limit in bits per second,
 # even though we specified it in Mbps on the command line.
-my $ratelimit = ($ARGV[1] * 1024 * 1024);
-my $timelimit = $ARGV[2];
+my $ratelimit = ($args{'r'} * 1024 * 1024);
+my $timelimit = $args{'t'};
 
 my $now = microtime();
 my $endtime = $now + $timelimit;
@@ -41,13 +45,26 @@ my %fetched;
 # we look at before deciding whether to start
 # another page fetch or not. Will be selectable
 # from CLI later.
-my $throttleperiod = 100;
+my $throttleperiod = $args{'p'};
 
 # store the time at which we begin the test run
 my $begin = microtime();
 
 # counter to let us keep track of when to placate the anxious human watching
 my $lastdisplay;
+
+# disable terminal buffering so we can do nice progress
+$| = 1;
+
+my $progresstext;
+
+print "\nBeginning test: fetching $args{'u'} ";
+if ($args{'r'} == -1) {
+	print "at full rate, ";
+} else {
+	print "at maximum rate $args{'r'} Mbps ";
+}
+print "(with throughput sampling period of $args{'p'} ms) for $args{'t'} seconds.\n\n";
 
 while ($now < $endtime) {
 	$now = microtime();
@@ -60,12 +77,29 @@ while ($now < $endtime) {
 
 	# display current throughput if we just changed second
 	if ( int($now) > $lastdisplay ) {
-		if ($lastdisplay > 0) { print "Current throughput: " . nearest(0.1, ($currentrate/1024/1024)) . " Mbps\n"; }
+
+		if ($lastdisplay > 0) { 
+			if (length $progresstext) {
+				# wipe lines on terminal for refresh with new lines
+
+				# move to beginning of line
+				print "\e[0E";
+				# clear to end of line
+				print "\e[K";
+				# move 1 line up, clear to beginning of that line
+				print "\e[1F";
+				print "\e[K";
+			}
+
+			$progresstext = "Current throughput: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+			$progresstext .= "\nSeconds remaining: " . int($endtime-$now);
+			print $progresstext;
+		}
 		$lastdisplay = int($now);
 	}
 
 	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
-	if ( $currentrate < $ratelimit) {
+	if ( ($ratelimit < 1) || ($currentrate < $ratelimit) ) {
 		# get current before-fetch time in microseconds so we can track latency for this request
 		my $beforetime = microtime();
 		# fetch the page
@@ -89,6 +123,12 @@ while ($now < $endtime) {
 # store the time at which we end the test run, and the total time elapsed
 my $end = microtime();
 
+# re-enable terminal buffering
+$| = 0;
+
+# skip down past our last progress text
+print "\n";
+
 # the stats we're going to output
 my $elapsed = nearest(0.1, ($end-$begin));
 my $numberfetched = scalar @latency;
@@ -103,27 +143,34 @@ my $meanlatency = nearest(0.01, (mean(@latency)) );
 my $medianlatency = nearest(0.01, (percentile(0.5,\@latency)) );
 my $minlatency = nearest(0.01, (min(@latency)) );
 my $maxlatency = nearest(0.01, (max(@latency)) );
+my $latency99 = nearest(0.1,percentile(0.99,\@latency));
+my $latency95 = nearest(0.1,percentile(0.95,\@latency));
+my $latency90 = nearest(0.1,percentile(0.90,\@latency));
+my $latency75 = nearest(0.1,percentile(0.75,\@latency));
 
-if ( (scalar @ARGV) >3 ) {
+# humanreadable output
+print "\n";
+print "Time elapsed: $elapsed seconds\n";
+print "Number of pages fetched: $numberfetched\n";
+print "Total data fetched: $totaldatafetched MB\n";
+print "Mean page length fetched: $meanpagelength KB\n";
+print "Page length maximum deviation: $pagelengthdeviation KB\n";
+print "Throughput achieved: $throughput Mbps\n";
+print "Mean latency: $meanlatency ms\n";
+print "\n";
+print "Worst latency: $maxlatency ms\n";
+print "99th percentile latency: $latency99 ms\n";
+print "95th percentile latency: $latency95 ms\n";
+print "90th percentile latency: $latency90 ms\n";
+print "75th percentile latency: $latency75 ms\n";
+print "Median latency: $medianlatency ms\n";
+print "Min latency: $minlatency ms\n";
+
+
+if ( $outputfile ne '' ) {
 	# CSV output
 	print "time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),median latency(ms),min latency(ms),max latency(ms)\n";
 	print "$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput,$meanlatency,$medianlatency,$minlatency,$maxlatency\n";
-} else {
-	# human-readable output
-	print "Time elapsed: $elapsed seconds\n";
-	print "Number of pages fetched: $numberfetched\n";
-	print "Total data fetched: $totaldatafetched MB\n";
-	print "Mean page length fetched: $meanpagelength KB\n";
-	print "Page length maximum deviation: $pagelengthdeviation KB\n";
-	print "Throughput achieved: $throughput Mbps\n";
-	print "Mean latency: $meanlatency ms\n";
-	print "Median latency: $medianlatency ms\n";
-	print "Min latency: $minlatency ms\n";
-	print "Max latency: $maxlatency ms\n";
-	print "99th percentile latency: " . nearest(0.1,percentile(0.99,\@latency)) . " ms\n";
-	print "95th percentile latency: " . nearest(0.1,percentile(0.95,\@latency)) . " ms\n";
-	print "90th percentile latency: " . nearest(0.1,percentile(0.9,\@latency)) . " ms\n";
-	print "75th percentile latency: " . nearest(0.1,percentile(0.75,\@latency)) . " ms\n";
 }
 
 #######################################################################################################
@@ -194,7 +241,7 @@ sub nearest {
 sub printusage {
 	print "\nFetchrate is a tool for testing network performance using an HTTP server.\n\n";
 	print "It will fetch an URL for a given number of seconds, but limits itself to a given rate in Mbps. Rather than throttling the network connection itself, fetchrate simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, fetchrate returns \n\n";
-	print "Usage: fetchrate [url] [rate limit in Mbps] [seconds to run test]\n\n";
+	print "Usage: fetchrate -u [url] -r [rate limit in Mbps] -t [seconds to run test] -p [throttling sample period in ms] -o [output file] \n\n";
 	return;
 }
 
@@ -227,3 +274,100 @@ sub currentrate {
 	my $rate = $fetchedthisperiod/($elapsed-$beginperiod);
 	return $rate;
 }
+
+sub getargs {
+	my @args = @_;
+	my %args;
+
+	my %novaluearg;
+	my %validarg;
+	push my @validargs, ('usage','u','r','t','p','o');
+	foreach my $item (@validargs) { $validarg{$item} = 1; }
+	push my @novalueargs, ('usage');
+	foreach my $item (@novalueargs) { $novaluearg{$item} = 1; }
+	push my @mandatoryargs, ('u');
+
+	# if user specified no args at all, force --usage on
+	if (scalar @args == 0) { $args{'usage'}=1; }
+
+	while (my $rawarg = shift(@args)) {
+		my $arg = $rawarg;
+		my $argvalue = '';
+		if ($rawarg =~ /=/) {
+			# user specified the value for a CLI argument with =
+			# instead of with blank space. separate appropriately.
+			$argvalue = $arg;
+			$arg =~ s/=.*$//;
+			$argvalue =~ s/^.*=//;
+		}
+		if ($rawarg =~ /^--/) {
+			# doubledash arg
+			$arg =~ s/^--//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} elsif ($arg =~ /^-/) {
+			# singledash arg
+			$arg =~ s/^-//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} else {
+			# bare arg
+			if (defined $args{'source'}) {
+				if (! defined $args{'target'}) {
+					$args{'target'} = $arg;
+				} else {
+					die "ERROR: don't know what to do with third bare argument $rawarg.\n";
+				}
+			} else {
+				$args{'source'} = $arg;
+			}
+		}
+	}
+
+	# if we aren't checking for usage, 
+	my @missingargs;
+	if (!defined $args{'usage'}) {
+		foreach my $mandarg (@mandatoryargs) {
+			if (! defined $args{$mandarg}) { push @missingargs, $mandarg; }
+		}
+	}	
+	if (scalar @missingargs) { 
+		printusage();
+
+		my $errortext = "ERROR: missing mandatory arguments ";
+		foreach my $missingarg (@missingargs) {
+			$errortext .= "-$missingarg, ";
+		}
+		# trim trailing ", " from errortext
+		$errortext = substr($errortext,0,((length $errortext)-2));
+		die "$errortext\n";
+	}
+
+	# set defaults for undefined non-mandatory arguments
+	if (!defined $args{'p'}) { $args{'p'} = 50; }
+	if (!defined $args{'r'}) { $args{'r'} = -1; }
+	if (!defined $args{'t'}) { $args{'t'} = 30; }
+
+	return %args;
+}
+
