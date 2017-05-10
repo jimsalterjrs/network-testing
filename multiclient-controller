@@ -1,0 +1,45 @@
+#!/usr/bin/perl
+
+# this software is licensed for use under the Free Software Foundation's GPL v3.0 license, as retrieved
+# from http://www.gnu.org/licenses/gpl-3.0.html on 2014-11-17.  A copy should also be available in this
+# project's Git repository at https://github.com/jimsalterjrs/FIX_THIS/blob/master/LICENSE.
+
+use strict;
+use Config::IniFiles;   # read samba-style conf file
+use Data::Dumper;       # debugging - print contents of hash
+
+my $conf_file = './multiclient.conf';
+my $sshcmd = '/usr/bin/ssh';
+
+# load test configs from multiclient.conf
+tie my %ini, 'Config::IniFiles', ( -file => $conf_file ) or die "FATAL: cannot load $conf_file.";
+
+# populate %devices from $ini{'devices'} for easier access later
+my $server = $ini{'devices'}{'server'};
+my %devices;
+foreach my $device (keys %{ $ini{'devices'} }) {
+	if ($device ne 'server') { $devices{$device} = $ini{'devices'}{$device}; }
+}
+
+# establish SSH control sessions for each device
+foreach my $device (sort keys %devices) { 
+	my $socket = "/tmp/multiclient-$device-" . time();
+	open FH, "$sshcmd -M -S $socket -o ControlPersist=5m $devices{$device} exit |";
+	close FH;
+}
+
+# establish clock is synced at each device
+foreach my $device (sort keys %devices) { 
+	my $cmd = "/bin/date $unixtimeformat " . '+%s';
+	my $now = time();
+	my $sync = `$sshcmd $devices{$device} $cmd`;
+	if ( abs($now - $sync) <2 ) {
+		print "Device $device at $devices{$device} is in sync with me.\n";
+	} else {
+		my $delta = $now-$sync;
+		print "Device $device at $devices{$device} is $delta seconds off from my clock.\n";
+	}
+}
+
+# sample bash loop to wait until unixtime to execute a command: while [[ $date -lt 1494277920 ]] ; do date=`/bin/date +%s`; echo $date; done
+# except that doesn't work worth a shit. Just going to have to use a perl client to run from this server and that's that, I guess.
