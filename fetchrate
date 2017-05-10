@@ -1,0 +1,171 @@
+#!/usr/bin/perl
+
+# usage: fetchrate [url] [ratelimit] [seconds] [format]
+#
+# fetchrate will fetch $ARGV[0] at a maximum rate of $ARGV[1] Mbps
+# for $ARGV[2] seconds total, at the end of which it will return 
+# values for actual rate achieved, minimum latency, maximum latency, 
+# average latency, and median latency.
+#
+# If any value is specified for $ARGV[3], output will be in table
+# format instead of human-readable format.
+
+use strict;
+
+if ((scalar @ARGV) < 3) { printusage(); exit 0; }
+
+use Time::HiRes qw ( usleep gettimeofday );
+use LWP::Simple;
+use List::Util qw ( sum min max );
+
+my $url = $ARGV[0];
+
+# we're going to track the rate limit in bits per second,
+# even though we specified it in Mbps on the command line.
+my $ratelimit = ($ARGV[1] * 1024 * 1024);
+my $timelimit = $ARGV[2];
+
+my $tableformat = $ARGV[4];
+
+my $now = microtime();
+my $endtime = $now + $timelimit;
+
+my $totalfetched;
+
+# arrays to push data during the test for statistics later
+my @latency;
+my @throughput;
+my @length;
+
+# store the time at which we begin the test run
+my $begin = microtime();
+
+while ($now < $endtime) {
+	$now = microtime();
+	my $elapsed = $now-$begin;
+	# prevent div by zero
+	if (! $elapsed) { $elapsed = 1; }
+
+	# only fetch another page if we haven't exceeded the rate limit
+	if ( ($totalfetched/$elapsed) < $ratelimit) {
+		# get current before-fetch time in microseconds so we can track latency for this request
+		my $beforetime = microtime();
+		# fetch the page
+		my $page = get $url;
+		# track page size
+		my $bits = (length $page) * 8;
+		# get current after-fetch time in microseconds so we can track latency for this request
+		my $aftertime = microtime();
+		my $elapsedms = (($aftertime-$beforetime)*1000);
+		# store latency of this request for statistics
+		push @latency, $elapsedms;
+		# store page length for statistics / to check for possible errors in our configs
+		push @length, ( (length $page) / 1024);
+		# update how much data we've fetched so far
+		$totalfetched += $bits;
+	}
+}
+
+# store the time at which we end the test run, and the total time elapsed
+my $end = microtime();
+
+# the stats we're going to output
+my $elapsed = nearest(0.1, ($end-$begin));
+my $numberfetched = scalar @latency;
+my $totaldatafetched = nearest(0.1, ($totalfetched/8/1024/1024) );
+my $meanpagelength = mean(@length);
+my $medianpagelength = median(@length);
+my $minpagelength = min(@length);
+my $maxpagelength = max(@length);
+my $pagelengthdeviation = $maxpagelength-$minpagelength;
+my $throughput = nearest(0.1, ($totalfetched/$elapsed/1024/1024) );
+my $meanlatency = nearest(0.01, (mean(@latency)) );
+my $medianlatency = nearest(0.01, (median(@latency)) );
+my $minlatency = nearest(0.01, (min(@latency)) );
+my $maxlatency = nearest(0.01, (max(@latency)) );
+
+if ( (scalar @ARGV) >3 ) {
+	# CSV output
+	print "time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),median latency(ms),min latency(ms),max latency(ms)\n";
+	print "$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput,$meanlatency,$medianlatency,$minlatency,$maxlatency\n";
+} else {
+	# human-readable output
+	print "Time elapsed: $elapsed seconds\n";
+	print "Number of pages fetched: $numberfetched\n";
+	print "Total data fetched: $totaldatafetched MB\n";
+	print "Mean page length fetched: $meanpagelength KB\n";
+	print "Page length maximum deviation: $pagelengthdeviation KB\n";
+	print "Throughput achieved: $throughput Mbps\n";
+	print "Mean latency: $meanlatency ms\n";
+	print "Median latency: $medianlatency ms\n";
+	print "Min latency: $minlatency ms\n";
+	print "Max latency: $maxlatency ms\n";
+}
+
+#######################################################################################################
+
+sub whenits{ 
+	# sleep until time given (in epoch seconds aka unix time)
+	my $exectime = shift;
+
+	# start out by using usleep for low CPU powered sleep for majority
+	# of the time until GO TIME	
+	my ($seconds,$microseconds) = gettimeofday();
+	my $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
+	my $usleeptime = ($exectime - $currenttime) * 1000000;
+	
+	if ($usleeptime < 1) {
+		print "WARNING: not enough time given for reliable sleep. " . ($usleeptime / 1000000) . "\n";
+		return -1;
+	}
+
+	# give ourselves a 2 tenths of a second window since usleep is only so accurate
+	$usleeptime -= 200000;
+	#print "Sleeping " . ($usleeptime / 1000000) . " seconds.\n";
+	usleep $usleeptime;
+	
+	# begin high-CPU-use countdown to execution time
+	my $time = time();
+	while ($time < $exectime) { $time = time() };
+	
+	($seconds,$microseconds) = gettimeofday();
+	$currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
+	#print "time is: $currenttime\n";
+	return;
+}
+
+sub median {
+	my @sorted = sort { $a <=> $b } @_;
+	($sorted[$#sorted/2 + 0.1] + $sorted[$#sorted/2 + 0.6])/2;
+}
+
+sub mean {
+	my $result;
+	foreach (@_) { $result += $_ }
+	return $result / @_;
+}
+
+sub nearest {
+	# nearest (.1, 2.054) = 2.1
+	my $nearest = shift;
+	my $num = shift;
+
+	$num = $num / $nearest;
+	$num = int ($num + 0.5);
+	$num = $num * $nearest;
+	return $num;
+}
+
+sub printusage {
+	print "\nFetchrate is a tool for testing network performance using an HTTP server.\n\n";
+	print "It will fetch an URL for a given number of seconds, but limits itself to a given rate in Mbps. Rather than throttling the network connection itself, fetchrate simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, fetchrate returns \n\n";
+	print "Usage: fetchrate [url] [rate limit in Mbps] [seconds to run test]\n\n";
+	return;
+}
+
+sub microtime {
+	my ($seconds,$microseconds) = gettimeofday();
+	my $microtime = "$seconds." . sprintf ("%.06d", $microseconds);
+	return $microtime;
+}
+

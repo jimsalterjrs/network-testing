@@ -1,0 +1,23 @@
+#!/usr/bin/perl
+
+# whenits [unixtime] [command] - execute the given command when the system reaches the unix time specifed as the first argument.
+
+use Time::HiRes qw ( usleep gettimeofday );
+
+my $exectime = $ARGV[0];
+
+my ($seconds,$microseconds) = gettimeofday();
+my $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
+my $usleeptime = ($exectime - $currenttime) * 1000000;
+
+# give ourselves a 2 tenths of a second window since usleep is only so accurate
+$usleeptime -= 200000;
+print "Sleeping " . ($usleeptime / 1000000) . " seconds.\n";
+usleep $usleeptime;
+
+my $time = time();
+while ($time < $exectime) { $time = time() };
+
+($seconds,$microseconds) = gettimeofday();
+$currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
+print "time is: $currenttime\n";
