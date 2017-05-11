@@ -92,7 +92,7 @@ while ($now < $endtime) {
 	}
 
 	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
-	if ( ($ratelimit < 1) || ($currentrate < $ratelimit) ) {
+	if ( ($ratelimit < 0) || ($currentrate < $ratelimit) ) {
 		# get current before-fetch time in microseconds so we can track latency for this request
 		my $beforetime = microtime();
 
@@ -114,9 +114,16 @@ while ($now < $endtime) {
 		# store latency and length of page of this request for statistics
 		$length{$timeslice} = $bits;
 		$latency{$timeslice} = $elapsedms;
-	} else {
-		# sleep a millisecond before trying again, to avoid burning the CPU unnecessarily
-		usleep 1000;
+		if ($elapsedms == 0) { $elapsedms = .0001; } # avoid divide by zero
+		my $lastxferrate = $bits/($elapsedms*1000);
+		if ( ($ratelimit > 0) && ($lastxferrate > $ratelimit)) {
+			# sleep for enough ms that the last transfer would have effectively been at $ratelimit
+			my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
+			my $desiredlatency = $desiredlatency * 1000; # seconds --> milliseconds
+			my $timetosleep = $desiredlatency-$elapsedms; # sleep this long now pls
+			my $timetosleep = $timetosleep * 1000; #milliseconds --> microseconds
+			usleep ($timetosleep);
+		}
 	}
 }
 
