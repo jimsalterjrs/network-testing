@@ -79,26 +79,6 @@ while ($now < $endtime) {
 
 	my $currentrate = $totalfetched / ($now-$begin);
 
-	# display current throughput if we just changed second
-	if ( int($now) > $lastdisplay ) {
-
-		if ($lastdisplay > 0) { 
-			if (length $progresstext) {
-				# wipe lines on terminal for refresh with new lines
-				for (my $counter=0; $counter<2 ; $counter++) {
-					# move 1 line up, clear to beginning of that line
-					print "\e[1F";
-					print "\e[K";
-				}
-			}
-
-			$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
-			$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
-			print $progresstext;
-		}
-		$lastdisplay = int($now);
-	}
-
 	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
 	if ( ($ratelimit < 0) || ($currentrate < $ratelimit) ) {
 		# get current before-fetch time in microseconds so we can track latency for this request
@@ -142,9 +122,30 @@ while ($now < $endtime) {
 			}
 		}
 	}
+
+	# display current throughput if we just changed second
+	if ( int($now) > $lastdisplay ) {
+
+		if ($lastdisplay > 0) { 
+			if (length $progresstext) {
+				# wipe lines on terminal for refresh with new lines
+				for (my $counter=0; $counter<2 ; $counter++) {
+					# move 1 line up, clear to beginning of that line
+					print "\e[1F";
+					print "\e[K";
+				}
+			}
+
+			my $currentrate = $totalfetched / ($now-$begin);
+			$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+			$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
+			print $progresstext;
+		}
+		$lastdisplay = int($now);
+	}
 }
 
-# store the time at which we end the test run, and the total time elapsed
+# store the time at which we ended the test run
 my $end = microtime();
 
 # re-enable terminal buffering
@@ -153,6 +154,7 @@ $| = 0;
 # skip down past our last progress text
 print "\n";
 
+# dump hashes into arrays for easier processing
 my @latencyarray;
 foreach my $timeslice (keys %latency) { push @latencyarray, $latency{$timeslice}; }
 my @lengtharray;
@@ -195,12 +197,6 @@ print "\n";
 print "Time elapsed: $elapsed seconds\n";
 print "Number of pages fetched: $numberfetched\n";
 print "Total data fetched: $totaldatafetched MB\n";
-	#print "\n\nDISCREPANCY: ";
-	#my $according;
-	#foreach my $time (keys %length) {
-	#	$according += $length{$time};
-	#}
-	#print "$totalfetched - $according = " . ($totalfetched-$according) . " bits\n\n";
 print "Mean page length fetched: $meanpagelength KB\n";
 print "Page length maximum deviation: $pagelengthdeviation KB\n";
 print "Throughput achieved: $throughput Mbps\n";
