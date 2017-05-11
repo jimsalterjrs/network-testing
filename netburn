@@ -216,13 +216,17 @@ if ($noisy) {
 
 # output to logfile in CSV format if -o specified
 if ( $outputfile ne '' ) {
+
+	if ($noisy) { print "\n"; }
+
 	open FH, ">> $outputfile";
 	if (! $args{'no-header'} ) { 
 		print FH "hostname,timestamp,time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
 		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
-	my $hostname = hostname;
+	my $hostname = $args{'h'};
+	if ($hostname eq '') { $hostname = hostname; }
 	print FH "$hostname,$timestamp,$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
 	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
 	close outputfile;
@@ -235,7 +239,7 @@ sub percentile {
 	my @unsorted = @{$_[1]};
 
 	my @sorted = sort { $a <=> $b } @unsorted;
-	my $index = (scalar @sorted) * $percentile;
+	my $index = ((scalar @sorted) -1) * $percentile;
 	$index = int ($index + 0.5);
 	return $sorted[$index];
 }
@@ -268,6 +272,7 @@ sub printusage {
 	print "               [-o {filespec} ]   ... output filespec for CSV report \n";
 	print "               [--no-header ]     ... suppress header row of CSV output \n";
 	print "               [-q ]              ... quiet (suppress all but CSV output) \n";
+	print "               [-h {hostname} ]   ... override system-defined hostname in CSV output \n";
 	print "               [--usage ]         ... you're looking at this right now \n";
 	print "\n\n";
 	return;
@@ -326,7 +331,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o','no-header','q');
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
