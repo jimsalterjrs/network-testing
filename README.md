@@ -9,16 +9,25 @@ It will fetch an URL for a given number of seconds, but can limit itself to a gi
 
 ~~~~
 Usage:
-        netburn -u {url} 
-               [-r {rate limit} ] ... specified in Mbps (default none)
-               [-t {seconds} ]    ... time to run test, default 30 
-               [-o {filespec} ]   ... output filespec for CSV report 
-               [--no-header ]     ... suppress header row of CSV output 
-               [-q ]              ... quiet (suppress all but CSV output) 
-               [--usage ]         ... you're looking at this right now 
+         netburn -u {url} 
+                [-r {rate limit} ] ... specified in Mbps (default none)
+                [-t {seconds} ]    ... time to run test, default 30 
+                [-o {filespec} ]   ... output filespec for CSV report 
+                [--no-header ]     ... suppress header row of CSV output 
+                [-q ]              ... quiet (suppress all but CSV output) 
+                [--usage ]         ... you're looking at this right now 
 ~~~~
 
 # whenits
 Whenits is a scheduler with millisecond-or-better precision.  Feed it a desired execution time in Unix epoch seconds, it will do a low-CPU-power sleep until 200ms before execution time, then a high-CPU-power loop to execute as close to the precise epoch time specified as possible.  
 
-Usage: whenits \[execution time in epoch seconds] \[/path/to/command arg1 arg2 arg3...]
+~~~~
+Usage: 
+         whenits \[execution time in epoch seconds] \[/path/to/command arg1 arg2 arg3...]
+
+Example:
+         ./whenits 1494534810 echo "hello world!"
+         Sleeping 2.43815999031067 seconds.
+         time is: 1494534810.003620
+         hello world!
+
