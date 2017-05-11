@@ -1,6 +1,8 @@
+<p align="center"><img src="http://openoid.net/gplv3-127x51.png" width=127 height=51></p>
+
 # network-testing
 
-<img src="http://openoid.net/gplv3-127x51.png" width=127 height=51 align="right">Tools to assist an intrepid researcher in testing the performance of networks, wired or wireless.
+<img src="http://openoid.net/gplv3-127x51.png" width=127 height=51 align="right">This is a small collection of GPLv3-licensed tools to assist an intrepid researcher in testing the performance of networks, wired or wireless.
 
 # netburn
 Netburn is a tool for testing network performance using an HTTP server back-end. It's similar to ApacheBench, but where ApacheBench is intended primarily to test the HTTP server itself, netburn is intended primarily to test the network between them.
