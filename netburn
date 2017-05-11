@@ -258,7 +258,7 @@ sub nearest {
 }
 
 sub printusage {
-	print "\nNetburn is a tool for testing network performance using an HTTP server.\n\n";
+	print "\nNetburn is a tool for testing network performance using an HTTP server back-end.\n\n";
 	print "It will fetch an URL for a given number of seconds, but limits itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, fetchrate returns information regarding throughput and latency of requests made.\n\n";
 	print "Usage: netburn -u {url} \n";
 	print "               [-r {rate limit} ] ... specified in Mbps (default none)\n";
