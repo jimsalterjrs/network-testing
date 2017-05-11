@@ -4,7 +4,7 @@
 
 use strict;
 use Time::HiRes qw ( usleep gettimeofday );
-use LWP::Simple;
+use HTTP::Tiny;
 use List::Util qw ( sum min max );
 
 # process command line arguments
@@ -36,11 +36,15 @@ my %length;
 # from CLI later.
 my $throttleperiod = $args{'p'};
 
+# set up variables for OO invocation of HTTP::Tiny
+my $http = HTTP::Tiny->new;
+my $response;
+
 # There's about a +30ms penalty on the first read of the series, for whatever reason.
 # If you want to only have the continuous stuff shown, you can just throw away the
 # first read here.
 #
-# my $page = get $url;
+# my $page = $http->get($url);
 
 # store the time at which we begin the test run
 my $begin = microtime();
@@ -84,7 +88,7 @@ while ($now < $endtime) {
 				}
 			}
 
-			$progresstext = "Current throughput: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+			$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
 			$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
 			print $progresstext;
 		}
@@ -97,7 +101,8 @@ while ($now < $endtime) {
 		my $beforetime = microtime();
 
 		# fetch the page
-		my $page = get $url;
+		my $response = $http->get($url);
+		my $page = $response->{content};
 
 		# get current after-fetch time in microseconds so we can track latency for this request
 		my $aftertime = microtime();
@@ -114,15 +119,23 @@ while ($now < $endtime) {
 		# store latency and length of page of this request for statistics
 		$length{$timeslice} = $bits;
 		$latency{$timeslice} = $elapsedms;
-		if ($elapsedms == 0) { $elapsedms = .0001; } # avoid divide by zero
-		my $lastxferrate = $bits/($elapsedms*1000);
-		if ( ($ratelimit > 0) && ($lastxferrate > $ratelimit)) {
-			# sleep for enough ms that the last transfer would have effectively been at $ratelimit
-			my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
-			my $desiredlatency = $desiredlatency * 1000; # seconds --> milliseconds
-			my $timetosleep = $desiredlatency-$elapsedms; # sleep this long now pls
-			my $timetosleep = $timetosleep * 1000; #milliseconds --> microseconds
-			usleep ($timetosleep);
+
+		my $elapsedseconds = $aftertime - $beforetime;
+		my $lastxferrate = $bits/$elapsedseconds;
+		
+		# this loop basically just helps avoid unnecessary CPU-thrashing through the main loop, by sleeping for enough microseconds
+		# to get us close to the time to fetch the next page. This also has the effect of keeping the main routine from "bursting"
+		# super fast during a really good throughput period to make up for a period of truly awful throughput, which is good for
+		# what we're really trying to do here: check to see if there are any of those truly awful periods in the first place.
+		if ($ratelimit > 0) {
+			if ($lastxferrate > $ratelimit) {
+				# sleep for enough ms that the last transfer would have effectively been at $ratelimit
+				my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
+				my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
+				my $timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
+				if ($timetosleep>200) { $timetosleep -= 200; } else { $timetosleep = 0; } # fudge factor to account for loop processing time
+				usleep ($timetosleep);
+			}
 		}
 	}
 }
