@@ -10,6 +10,7 @@ use strict;
 use Time::HiRes qw ( usleep gettimeofday );
 use HTTP::Tiny;
 use List::Util qw ( sum min max );
+use Sys::Hostname;
 
 # process command line arguments
 my %args = getargs(@ARGV);
@@ -19,6 +20,7 @@ if ($args{'usage'}) { printusage(); exit; }
 my $url = $args{'u'};
 
 my $outputfile = $args{'o'};
+my $noisy = (! $args{'q'});
 
 # we're going to track the rate limit in bits per second,
 # even though we specified it in Mbps on the command line.
@@ -61,18 +63,18 @@ $| = 1;
 
 my $progresstext;
 
-print "\nBeginning test: fetching $args{'u'} ";
-if ($args{'r'} == -1) {
-	print "at full rate, ";
-} else {
-	print "at maximum rate $args{'r'} Mbps ";
+if ($noisy) {
+	print "\nBeginning test: fetching $args{'u'} ";
+	if ($args{'r'} == -1) {
+		print "at full rate, ";
+	} else {
+		print "at maximum rate $args{'r'} Mbps ";
+	}
+	if ($args{'p'}) {
+		print "(with throughput sampling period of $args{'p'} ms) ";
+	}
+	print "for $args{'t'} seconds.\n\n";
 }
-
-if ($args{'p'}) {
-	print "(with throughput sampling period of $args{'p'} ms) ";
-}
-
-print "for $args{'t'} seconds.\n\n";
 
 while ($now < $endtime) {
 	$now = microtime();
@@ -123,25 +125,28 @@ while ($now < $endtime) {
 		}
 	}
 
+
 	# display current throughput if we just changed second
-	if ( int($now) > $lastdisplay ) {
-
-		if ($lastdisplay > 0) { 
-			if (length $progresstext) {
-				# wipe lines on terminal for refresh with new lines
-				for (my $counter=0; $counter<2 ; $counter++) {
-					# move 1 line up, clear to beginning of that line
-					print "\e[1F";
-					print "\e[K";
+	if ($noisy) {
+		if ( int($now) > $lastdisplay ) {
+	
+			if ($lastdisplay > 0) { 
+				if (length $progresstext) {
+					# wipe lines on terminal for refresh with new lines
+					for (my $counter=0; $counter<2 ; $counter++) {
+						# move 1 line up, clear to beginning of that line
+						print "\e[1F";
+						print "\e[K";
+					}
 				}
+	
+				my $currentrate = $totalfetched / ($now-$begin);
+				$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+				$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
+				print $progresstext;
 			}
-
-			my $currentrate = $totalfetched / ($now-$begin);
-			$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
-			$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
-			print $progresstext;
+			$lastdisplay = int($now);
 		}
-		$lastdisplay = int($now);
 	}
 }
 
@@ -150,9 +155,6 @@ my $end = microtime();
 
 # re-enable terminal buffering
 $| = 0;
-
-# skip down past our last progress text
-print "\n";
 
 # dump hashes into arrays for easier processing
 my @latencyarray;
@@ -189,65 +191,44 @@ if (0) {
 	}
 	$worsttime -= $begin;
 	$worsttime = $worsttime*1000;
-	print "Worst latency $worst happened $worsttime milliseconds in.\n\n";
+	if ($noisy) { print "Worst latency $worst happened $worsttime milliseconds in.\n\n"; }
 }
 
 # humanreadable output
-print "\n";
-print "Time elapsed: $elapsed seconds\n";
-print "Number of pages fetched: $numberfetched\n";
-print "Total data fetched: $totaldatafetched MB\n";
-print "Mean page length fetched: $meanpagelength KB\n";
-print "Page length maximum deviation: $pagelengthdeviation KB\n";
-print "Throughput achieved: $throughput Mbps\n";
-print "Mean latency: $meanlatency ms\n";
-print "\n";
-print "Worst latency: $maxlatency ms\n";
-print "99th percentile latency: $latency99 ms\n";
-print "95th percentile latency: $latency95 ms\n";
-print "90th percentile latency: $latency90 ms\n";
-print "75th percentile latency: $latency75 ms\n";
-print "Median latency: $latency50 ms\n";
-print "Min latency: $minlatency ms\n";
+if ($noisy) {
+	print "\n";
+	print "Time elapsed: $elapsed seconds\n";
+	print "Number of pages fetched: $numberfetched\n";
+	print "Total data fetched: $totaldatafetched MB\n";
+	print "Mean page length fetched: $meanpagelength KB\n";
+	print "Page length maximum deviation: $pagelengthdeviation KB\n";
+	print "Throughput achieved: $throughput Mbps\n";
+	print "Mean latency: $meanlatency ms\n";
+	print "\n";
+	print "Worst latency: $maxlatency ms\n";
+	print "99th percentile latency: $latency99 ms\n";
+	print "95th percentile latency: $latency95 ms\n";
+	print "90th percentile latency: $latency90 ms\n";
+	print "75th percentile latency: $latency75 ms\n";
+	print "Median latency: $latency50 ms\n";
+	print "Min latency: $minlatency ms\n";
+}
 
-
+# output to logfile in CSV format if -o specified
 if ( $outputfile ne '' ) {
-	# CSV output
-	print "time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),median latency(ms),min latency(ms),max latency(ms)\n";
-	print "$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput,$meanlatency,$latency50,$minlatency,$maxlatency\n";
+	open FH, ">> $outputfile";
+	if (! $args{'no-header'} ) { 
+		print FH "hostname,timestamp,time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
+		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
+	}
+	my $timestamp = timestamp(int($begin));
+	my $hostname = hostname;
+	print FH "$hostname,$timestamp,$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
+	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
+	close outputfile;
 }
 
 #######################################################################################################
-
-sub whenits{ 
-	# sleep until time given (in epoch seconds aka unix time)
-	my $exectime = shift;
-
-	# start out by using usleep for low CPU powered sleep for majority
-	# of the time until GO TIME	
-	my ($seconds,$microseconds) = gettimeofday();
-	my $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
-	my $usleeptime = ($exectime - $currenttime) * 1000000;
-	
-	if ($usleeptime < 1) {
-		print "WARNING: not enough time given for reliable sleep. " . ($usleeptime / 1000000) . "\n";
-		return -1;
-	}
-
-	# give ourselves a 2 tenths of a second window since usleep is only so accurate
-	$usleeptime -= 200000;
-	#print "Sleeping " . ($usleeptime / 1000000) . " seconds.\n";
-	usleep $usleeptime;
-	
-	# begin high-CPU-use countdown to execution time
-	my $time = time();
-	while ($time < $exectime) { $time = time() };
-	
-	($seconds,$microseconds) = gettimeofday();
-	$currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
-	#print "time is: $currenttime\n";
-	return;
-}
 
 sub percentile {
 	my $percentile = $_[0];
@@ -342,10 +323,12 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o');
+	push my @validargs, ('usage','u','r','t','o','no-header','q');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
-	push my @novalueargs, ('usage');
+
+	push my @novalueargs, ('usage','no-header','q');
 	foreach my $item (@novalueargs) { $novaluearg{$item} = 1; }
+
 	push my @mandatoryargs, ('u');
 
 	# if user specified no args at all, force --usage on
@@ -425,3 +408,19 @@ sub getargs {
 	return %args;
 }
 
+sub timestamp {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(shift);
+	my @abbr = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+	my $month = $abbr[$mon];
+	$year += 1900;
+	$mon ++;
+
+	$mon = sprintf('%02d',$mon);
+	$mday = sprintf('%02d',$mday);
+	$sec = sprintf('%02d',$sec);
+	$min = sprintf('%02d',$min);
+	$hour = sprintf('%02d',$hour);
+
+	my $timestamp = "$year-$mon-$mday $hour:$min:$sec";
+	return $timestamp;
+}
