@@ -14,8 +14,34 @@ Usage:
                 [-t {seconds} ]    ... time to run test, default 30 
                 [-o {filespec} ]   ... output filespec for CSV report 
                 [--no-header ]     ... suppress header row of CSV output 
+                [-h {hostname} ]   ... override system-defined hostname in CSV output
                 [-q ]              ... quiet (suppress all but CSV output) 
                 [--usage ]         ... you're looking at this right now 
+
+Example:
+
+         me@banshee:~/network-testing$ ./netburn -u http://remote.server/128K.bin -r 10
+
+         Beginning test: fetching http://remote.server/128K.bin at maximum rate 10 Mbps for 30 seconds.
+
+         Throughput so far: 10.01 Mbps
+         Seconds remaining: 0
+
+         Time elapsed: 30.2 seconds
+         Number of pages fetched: 301
+         Total data fetched: 37.6 MB
+         Mean page length fetched: 1048576 KB
+         Page length maximum deviation: 0 KB
+         Throughput achieved: 10 Mbps
+         Mean latency: 41.65 ms
+         
+         Worst latency: 190 ms
+         99th percentile latency: 51 ms
+         95th percentile latency: 46 ms
+         90th percentile latency: 45 ms
+         75th percentile latency: 43 ms
+         Median latency: 41 ms
+         Min latency: 35 ms
 ~~~~
 
 # whenits
