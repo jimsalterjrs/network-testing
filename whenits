@@ -20,7 +20,7 @@ my $usleeptime = ($exectime - $currenttime) * 1000000;
 # give ourselves a 2 tenths of a second window since usleep is only so accurate
 $usleeptime -= 200000;
 print "Sleeping " . ($usleeptime / 1000000) . " seconds.\n";
-usleep $usleeptime;
+if ($usleeptime>0) { usleep $usleeptime; }
 
 my $time = time();
 while ($time < $exectime) { $time = time() };
@@ -28,3 +28,8 @@ while ($time < $exectime) { $time = time() };
 ($seconds,$microseconds) = gettimeofday();
 $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
 print "time is: $currenttime\n";
+
+my @args = @ARGV;
+shift @args;
+
+exec @args;
