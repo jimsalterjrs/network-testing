@@ -1,4 +1,4 @@
-<p align="center"><img src="http://openoid.net/openoid-white-on-red-274x69.png" width=274 height=69> <img src="http://openoid.net/gplv3-127x51.png" width=127 height=51></p>
+<<p align="center"><img src="http://openoid.net/openoid-white-on-red-274x51.png" width=274 height=51> <img src="http://openoid.net/gplv3-127x51.png" width=127 height=51></p>
 
 # network-testing
 
