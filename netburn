@@ -1,0 +1,429 @@
+#!/usr/bin/perl
+
+# (c) 2017 Jim Salter. Licensed GPLv3. netburn --usage for details.
+
+# this software is licensed for use under the Free Software Foundation's GPL v3.0 license, as retrieved
+# from http://www.gnu.org/licenses/gpl-3.0.html on 2014-11-17.  A copy should also be available in this
+# project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
+
+use strict;
+use Time::HiRes qw ( usleep gettimeofday );
+use HTTP::Tiny;
+use List::Util qw ( sum min max );
+use Sys::Hostname;
+
+# process command line arguments
+my %args = getargs(@ARGV);
+
+if ($args{'usage'}) { printusage(); exit; }
+
+my $url = $args{'u'};
+
+my $outputfile = $args{'o'};
+my $noisy = (! $args{'q'});
+
+# we're going to track the rate limit in bits per second,
+# even though we specified it in Mbps on the command line.
+my $ratelimit = ($args{'r'} * 1024 * 1024);
+my $timelimit = $args{'t'};
+
+my $now = microtime();
+my $endtime = $now + $timelimit;
+
+my $totalfetched;
+
+# hashes to push data to during the test for statistics later
+my %latency;
+my %length;
+
+# set the throttling period in ms - how much history
+# we look at before deciding whether to start
+# another page fetch or not. Will be selectable
+# from CLI later.
+my $throttleperiod = $args{'p'};
+
+# set up variables for OO invocation of HTTP::Tiny
+my $http = HTTP::Tiny->new;
+my $response;
+
+# There's about a +30ms penalty on the first read of the series, for whatever reason.
+# If you want to only have the continuous stuff shown, you can just throw away the
+# first read here.
+#
+# my $page = $http->get($url);
+
+# store the time at which we begin the test run
+my $begin = microtime();
+
+# counter to let us keep track of when to placate the anxious human watching
+my $lastdisplay;
+
+# disable terminal buffering so we can do nice progress
+$| = 1;
+
+my $progresstext;
+
+if ($noisy) {
+	print "\nBeginning test: fetching $args{'u'} ";
+	if ($args{'r'} == -1) {
+		print "at full rate, ";
+	} else {
+		print "at maximum rate $args{'r'} Mbps ";
+	}
+	if ($args{'p'}) {
+		print "(with throughput sampling period of $args{'p'} ms) ";
+	}
+	print "for $args{'t'} seconds.\n\n";
+}
+
+while ($now < $endtime) {
+	$now = microtime();
+
+	my $currentrate = $totalfetched / ($now-$begin);
+
+	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
+	if ( ($ratelimit < 0) || ($currentrate < $ratelimit) ) {
+		# get current before-fetch time in microseconds so we can track latency for this request
+		my $beforetime = microtime();
+
+		# fetch the page
+		my $response = $http->get($url);
+		my $page = $response->{content};
+
+		# get current after-fetch time in microseconds so we can track latency for this request
+		my $aftertime = microtime();
+		my $elapsedms = int(($aftertime-$beforetime)*1000);
+
+		# track page size
+		my $bits = (length $page) * 8;
+
+		# update how much data we've fetched so far
+		$totalfetched += $bits;
+
+		# update %fetched for each ms of this request, with the mean throughput of this request for each ms
+		my $timeslice = int($aftertime*1000);
+		# store latency and length of page of this request for statistics
+		$length{$timeslice} = $bits;
+		$latency{$timeslice} = $elapsedms;
+
+		my $elapsedseconds = $aftertime - $beforetime;
+		my $lastxferrate = $bits/$elapsedseconds;
+		
+		# this loop basically just helps avoid unnecessary CPU-thrashing through the main loop, by sleeping for enough microseconds
+		# to get us close to the time to fetch the next page. This also has the effect of keeping the main routine from "bursting"
+		# super fast during a really good throughput period to make up for a period of truly awful throughput, which is good for
+		# what we're really trying to do here: check to see if there are any of those truly awful periods in the first place.
+		if ($ratelimit > 0) {
+			if ($lastxferrate > $ratelimit) {
+				# sleep for enough ms that the last transfer would have effectively been at $ratelimit
+				my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
+				my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
+				my $timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
+				if ($timetosleep>200) { $timetosleep -= 200; } else { $timetosleep = 0; } # fudge factor to account for loop processing time
+				usleep ($timetosleep);
+			}
+		}
+	}
+
+
+	# display current throughput if we just changed second
+	if ($noisy) {
+		if ( int($now) > $lastdisplay ) {
+	
+			if ($lastdisplay > 0) { 
+				if (length $progresstext) {
+					# wipe lines on terminal for refresh with new lines
+					for (my $counter=0; $counter<2 ; $counter++) {
+						# move 1 line up, clear to beginning of that line
+						print "\e[1F";
+						print "\e[K";
+					}
+				}
+	
+				my $currentrate = $totalfetched / ($now-$begin);
+				$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+				$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
+				print $progresstext;
+			}
+			$lastdisplay = int($now);
+		}
+	}
+}
+
+# store the time at which we ended the test run
+my $end = microtime();
+
+# re-enable terminal buffering
+$| = 0;
+
+# dump hashes into arrays for easier processing
+my @latencyarray;
+foreach my $timeslice (keys %latency) { push @latencyarray, $latency{$timeslice}; }
+my @lengtharray;
+foreach my $timeslice (keys %length) { push @lengtharray, $length{$timeslice}; }
+
+# the stats we're going to output
+my $elapsed = nearest(0.1, ($end-$begin));
+my $numberfetched = scalar keys %latency;
+my $totaldatafetched = nearest(0.1, ($totalfetched/8/1024/1024) );
+my $meanpagelength = mean(@lengtharray);
+my $medianpagelength = percentile(0.5,\@lengtharray);
+my $minpagelength = min(@lengtharray);
+my $maxpagelength = max(@lengtharray);
+my $pagelengthdeviation = $maxpagelength-$minpagelength;
+my $throughput = nearest(0.1, ($totalfetched/$elapsed/1024/1024) );
+my $meanlatency = nearest(0.01, (mean(@latencyarray)) );
+my $minlatency = nearest(0.01, (min(@latencyarray)) );
+my $maxlatency = nearest(0.01, (max(@latencyarray)) );
+my $latency99 = nearest(0.1,percentile(0.99,\@latencyarray));
+my $latency95 = nearest(0.1,percentile(0.95,\@latencyarray));
+my $latency90 = nearest(0.1,percentile(0.90,\@latencyarray));
+my $latency75 = nearest(0.1,percentile(0.75,\@latencyarray));
+my $latency50 = nearest(0.01, (percentile(0.5,\@latencyarray)) );
+
+# change to 1 if you want to see when your worst latency fetch happened.
+if (0) {
+	my $worst=0;
+	my $worsttime;
+	my $counter;
+	foreach my $time (sort {$a<=>$b} keys %latency) {
+		if ($latency{$time}>$worst) { $worst = $latency{$time}; $worsttime=$time/1000; }
+	}
+	$worsttime -= $begin;
+	$worsttime = $worsttime*1000;
+	if ($noisy) { print "Worst latency $worst happened $worsttime milliseconds in.\n\n"; }
+}
+
+# humanreadable output
+if ($noisy) {
+	print "\n";
+	print "Time elapsed: $elapsed seconds\n";
+	print "Number of pages fetched: $numberfetched\n";
+	print "Total data fetched: $totaldatafetched MB\n";
+	print "Mean page length fetched: $meanpagelength KB\n";
+	print "Page length maximum deviation: $pagelengthdeviation KB\n";
+	print "Throughput achieved: $throughput Mbps\n";
+	print "Mean latency: $meanlatency ms\n";
+	print "\n";
+	print "Worst latency: $maxlatency ms\n";
+	print "99th percentile latency: $latency99 ms\n";
+	print "95th percentile latency: $latency95 ms\n";
+	print "90th percentile latency: $latency90 ms\n";
+	print "75th percentile latency: $latency75 ms\n";
+	print "Median latency: $latency50 ms\n";
+	print "Min latency: $minlatency ms\n";
+}
+
+# output to logfile in CSV format if -o specified
+if ( $outputfile ne '' ) {
+	open FH, ">> $outputfile";
+	if (! $args{'no-header'} ) { 
+		print FH "hostname,timestamp,time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
+		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
+	}
+	my $timestamp = timestamp(int($begin));
+	my $hostname = hostname;
+	print FH "$hostname,$timestamp,$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
+	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
+	close outputfile;
+}
+
+#######################################################################################################
+
+sub percentile {
+	my $percentile = $_[0];
+	my @unsorted = @{$_[1]};
+
+	my @sorted = sort { $a <=> $b } @unsorted;
+	my $index = (scalar @sorted) * $percentile;
+	$index = int ($index + 0.5);
+	return $sorted[$index];
+}
+
+sub mean {
+	my $result;
+	foreach (@_) { $result += $_ }
+	return $result / @_;
+}
+
+sub nearest {
+	# nearest (.1, 2.054) = 2.1
+	my $nearest = shift;
+	my $num = shift;
+
+	$num = $num / $nearest;
+	$num = int ($num + 0.5);
+	$num = $num * $nearest;
+	return $num;
+}
+
+sub printusage {
+	print "\nNetburn is a tool for testing network performance using an HTTP server.\n\n";
+	print "It will fetch an URL for a given number of seconds, but limits itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, fetchrate returns information regarding throughput and latency of requests made.\n\n";
+	print "Usage: netburn -u {url} \n";
+	print "               [-r {rate limit} ] ... specified in Mbps (default none)\n";
+	print "               [-t {seconds} ]    ... time to run test, default 30 \n";
+	# disabling progressive throttling due to unreasonable CPU load
+	# print "-p [throttling sample period in ms] ";
+	print "               [-o {filespec} ]   ... output filespec for CSV report \n";
+	print "               [--no-header ]     ... suppress header row of CSV output \n";
+	print "               [-q ]              ... quiet (suppress all but CSV output) \n";
+	print "               [--usage ]         ... you're looking at this right now \n";
+	print "\n\n";
+	return;
+}
+
+sub microtime {
+	my ($seconds,$microseconds) = gettimeofday();
+	my $microtime = "$seconds." . sprintf ("%.06d", $microseconds);
+	return $microtime;
+}
+
+sub progressiverate {
+	# take throttleperiod, current time in ms, and a reference to the "fetched" hash, which stores the amount of data fetched at a given millisecond of testing.
+	# that last is slightly confusing: a page will almost never load in a single millisecond, but the array is updated at the time of a fetch completion,
+	# so if a 128KB page completes fetching at millisecond 300, then $fetched->{'300'} == 131072.
+	#
+	# returns value in bits per second.
+	#
+	# not currently using this functionality because I determined it slowed things down wayyyyy too much.
+
+	my $throttleperiod = shift;
+	my $now = shift;
+	my $length = shift;
+	my $latency = shift;
+	
+	my $fetchedthisperiod;
+
+	my $beginperiod = $now - $throttleperiod;
+	if ($beginperiod < 0) { $beginperiod = 0; }
+
+	foreach my $time (keys %$length) {
+		if ($time > $beginperiod) { 
+			my $begin = $time - $latency->{$time};
+			my $thisfetch = $length->{$time}; 
+			if ($begin < $beginperiod) {
+				# we need to throw away some of this page fetch
+				# because it started prior to our throttling sample period
+				my $netburn = $thisfetch / ($latency->{$time});
+				my $invalidtime = $beginperiod-$begin;
+				$thisfetch -= ($invalidtime * $netburn);
+			}
+			$fetchedthisperiod += $thisfetch;
+		}
+	}
+	
+	my $rate;
+	my $thisperiod = $now-$beginperiod; 
+	if ($thisperiod == 0) { $thisperiod = 1; }
+	$rate = $fetchedthisperiod/($thisperiod/1000);
+	return $rate;
+}
+
+sub getargs {
+	my @args = @_;
+	my %args;
+
+	my %novaluearg;
+	my %validarg;
+	push my @validargs, ('usage','u','r','t','o','no-header','q');
+	foreach my $item (@validargs) { $validarg{$item} = 1; }
+
+	push my @novalueargs, ('usage','no-header','q');
+	foreach my $item (@novalueargs) { $novaluearg{$item} = 1; }
+
+	push my @mandatoryargs, ('u');
+
+	# if user specified no args at all, force --usage on
+	if (scalar @args == 0) { $args{'usage'}=1; }
+
+	while (my $rawarg = shift(@args)) {
+		my $arg = $rawarg;
+		my $argvalue = '';
+		if ($rawarg =~ /=/) {
+			# user specified the value for a CLI argument with =
+			# instead of with blank space. separate appropriately.
+			$argvalue = $arg;
+			$arg =~ s/=.*$//;
+			$argvalue =~ s/^.*=//;
+		}
+		if ($rawarg =~ /^--/) {
+			# doubledash arg
+			$arg =~ s/^--//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} elsif ($arg =~ /^-/) {
+			# singledash arg
+			$arg =~ s/^-//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} else {
+			# bare arg
+			die "ERROR: don't know what to do with bare argument $rawarg.\n";
+		}
+	}
+
+	# if we aren't checking for usage, 
+	my @missingargs;
+	if (!defined $args{'usage'}) {
+		foreach my $mandarg (@mandatoryargs) {
+			if (! defined $args{$mandarg}) { push @missingargs, $mandarg; }
+		}
+	}	
+	if (scalar @missingargs) { 
+		printusage();
+
+		my $errortext = "ERROR: missing mandatory arguments ";
+		foreach my $missingarg (@missingargs) {
+			$errortext .= "-$missingarg, ";
+		}
+		# trim trailing ", " from errortext
+		$errortext = substr($errortext,0,((length $errortext)-2));
+		die "$errortext\n";
+	}
+
+	# set defaults for undefined non-mandatory arguments
+	# if (!defined $args{'p'}) { $args{'p'} = 0; }
+	$args{'p'} = 0; # progressive throttling is too demanding on the CPU
+	if (!defined $args{'r'}) { $args{'r'} = -1; }
+	if (!defined $args{'t'}) { $args{'t'} = 30; }
+
+	return %args;
+}
+
+sub timestamp {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(shift);
+	my @abbr = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+	my $month = $abbr[$mon];
+	$year += 1900;
+	$mon ++;
+
+	$mon = sprintf('%02d',$mon);
+	$mday = sprintf('%02d',$mday);
+	$sec = sprintf('%02d',$sec);
+	$min = sprintf('%02d',$min);
+	$hour = sprintf('%02d',$hour);
+
+	my $timestamp = "$year-$mon-$mday $hour:$min:$sec";
+	return $timestamp;
+}
