@@ -23,10 +23,10 @@ Whenits is a scheduler with millisecond-or-better precision.  Feed it a desired 
 
 ~~~~
 Usage: 
-         whenits \[execution time in epoch seconds] \[/path/to/command arg1 arg2 arg3...]
+         whenits {execution time in epoch seconds} {/path/to/command arg1 arg2 arg3...}
 
 Example:
-         ./whenits 1494534810 echo "hello world!"
+         me@banshee:~/network-testing$ ./whenits 1494534810 echo "hello world!"
          Sleeping 2.43815999031067 seconds.
          time is: 1494534810.003620
          hello world!
