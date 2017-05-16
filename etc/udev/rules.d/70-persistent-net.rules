@@ -1,0 +1,7 @@
+# sample udev rules.d file to make four different USB3 wifi adapters all use the devicename "test0" when connected
+#        replace with the BSSID of the NIC in question to make this work for you.  This works for Ubuntu 16.04.2.
+
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="c8:d7:19:00:00:00", ATTR{dev_id}=="0x0", ATTR{type}=="1", NAME="test0"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="c8:d7:19:00:00:01", ATTR{dev_id}=="0x0", ATTR{type}=="1", NAME="test0"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="c8:d7:19:00:00:02", ATTR{dev_id}=="0x0", ATTR{type}=="1", NAME="test0"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="c8:d7:19:00:00:03", ATTR{dev_id}=="0x0", ATTR{type}=="1", NAME="test0"
