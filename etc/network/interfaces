@@ -1,0 +1,15 @@
+# interfaces(5) file used by ifup(8) and ifdown(8)
+# Include files from /etc/network/interfaces.d:
+source-directory /etc/network/interfaces.d
+
+# static configuration for test interface
+auto test0
+iface test0 inet static
+	wpa-ssid ssidname
+  # generate passphrase using wpa_passphrase <SSID>
+	wpa-psk c67b6fc91e5483446286d8f66f9391d6ffa792a82ed5b0345b59f99580f05dca
+  address 192.168.0.80
+  netmask 255.255.255.0
+  gateway 192.168.0.1
+  dns-nameservers 8.8.8.8
+
