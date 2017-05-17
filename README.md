@@ -5,7 +5,7 @@ Netburn is a tool for testing network performance using an HTTP server back-end.
 
 It will fetch an URL for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, netburn returns information regarding throughput and latency of requests made.
 
-IMPORTANT NOTE about the -c {concurrency} option: if you ask for -c 10, each "page" will consist of 10 parallel fetches of URL, and the "latency" will be the amount of time it takes to get the last bit from the last concurrent child fetch. Another new "page" fetch will not begin until after ALL child fetches complete - this simulates the experience of browsing web pages with multiple resources, and is very different from Apachebench's -c 10, which merely hammers the server as hard as possible from ten completely independent client processes!
+**IMPORTANT NOTE** about the -c {concurrency} option: if you ask for -c 10, each "page" will consist of 10 parallel fetches of URL, and the "latency" will be the amount of time it takes to get the last bit from the last concurrent child fetch. Another new "page" fetch will not begin until after ALL child fetches complete - this simulates the experience of browsing web pages with multiple resources, and is very different from Apachebench's -c 10, which merely hammers the server as hard as possible from ten completely independent client processes!
 
 ~~~~
 Usage:
