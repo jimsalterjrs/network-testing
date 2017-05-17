@@ -94,6 +94,15 @@ while ($now < $endtime) {
 
 		my $bits;
 
+		# note: concurrency=1 will attempt to use HTTP Keepalives for the ENTIRE session,
+		#       all page fetches, beginning to end.
+		#	
+		#	concurrency=2 or greater, on the other hand, will only use HTTP keepalives
+		#	for each "page" session, ie for each burst of concurrent child fetches.
+		#
+		#	dammit, this is probably another option I should turn on or off by command
+		#	line arguments isn't it...
+		#
 		if ($concurrency == 1) {
 			# simple fetch of the page 
 			my $response = $http->get($url);
