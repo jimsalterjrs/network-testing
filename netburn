@@ -20,7 +20,7 @@ if ($args{'usage'}) { printusage(); exit; }
 # only print stuff to STDOUT if -q is off
 my $noisy = (! $args{'q'});
 
-# get test interface wifi information if requested using --ifinfo
+# get test interface wifi info if --ifinfo is set
 my $essid,$freq,$ap,$bitrate,$quality;
 if ($args{'ifinfo'}) { 
 	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
