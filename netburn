@@ -21,7 +21,8 @@ if ($args{'usage'}) { printusage(); exit; }
 my $noisy = (! $args{'q'});
 
 # get test interface wifi info if --ifinfo is set
-my $essid,$freq,$ap,$bitrate,$quality;
+my ($essid,$freq,$ap,$bitrate,$quality);
+
 if ($args{'ifinfo'}) { 
 	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
 	if ($noisy) { 
@@ -247,13 +248,21 @@ if ( $outputfile ne '' ) {
 
 	open FH, ">> $outputfile";
 	if (! $args{'no-header'} ) { 
-		print FH "hostname,timestamp,time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
+		print FH "hostname,timestamp,";
+		if ($args{'ifinfo'}) {
+			print FH "interface,essid,frequency,ap,bitrate,linkquality,";
+		}
+		print FH "time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
 		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
 	my $hostname = $args{'h'};
 	if ($hostname eq '') { $hostname = hostname; }
-	print FH "$hostname,$timestamp,$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
+	print FH "$hostname,$timestamp,";
+	if ($args{'ifinfo'}) {
+		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
+	}
+	print FH "$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
 	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
 	close outputfile;
 }
@@ -544,6 +553,7 @@ sub getifinfo {
 
 	my $ap = $raw[1];
 	$ap =~ s/^.*Point: //;
+	$ap =~ s/ *$//;
 	chomp $ap;
 
 	my $quality = $raw[6];
