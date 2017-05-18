@@ -309,6 +309,7 @@ sub printusage {
 	print "               [-q ]               ... quiet (suppress all but CSV output) \n";
 	print "               [-h {hostname} ]    ... override system-defined hostname in CSV output \n";
 	print "               [-c {concurrency} ] ... number of concurrent URL fetches to make per 'page' fetch\n";
+	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
 	print "               [--usage ]          ... you're looking at this right now \n";
 	print "\n\n";
 	return;
