@@ -17,14 +17,22 @@ my %args = getargs(@ARGV);
 
 if ($args{'usage'}) { printusage(); exit; }
 
+# only print stuff to STDOUT if -q is off
+my $noisy = (! $args{'q'});
+
+# get test interface wifi information if requested using --ifinfo
+my $essid,$freq,$ap,$bitrate,$quality;
 if ($args{'ifinfo'}) { 
-	my ($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
-	print "ESSID: $essid\n";
-	print "Frequency: $freq\n";
-	print "AP: $ap\n";
-	print "Bitrate: $bitrate\n";
-	print "Link Quality: $quality\n";
-	exit;
+	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
+	if ($noisy) { 
+		print "Interface: $args{'ifinfo'}\n";
+		print "ESSID: $essid\n";
+		print "Frequency: $freq\n";
+		print "AP: $ap\n";
+		print "Bitrate: $bitrate\n";
+		print "Link Quality: $quality\n";
+		print "\n";
+	}
 }
 	
 
@@ -35,7 +43,6 @@ my $concurrency = $args{'c'};
 my $url = $args{'u'};
 
 my $outputfile = $args{'o'};
-my $noisy = (! $args{'q'});
 
 # we're going to track the rate limit in bits per second,
 # even though we specified it in Mbps on the command line.
