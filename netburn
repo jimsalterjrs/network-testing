@@ -252,7 +252,7 @@ if ( $outputfile ne '' ) {
 		if ($args{'ifinfo'}) {
 			print FH "interface,essid,frequency,ap,bitrate,linkquality,";
 		}
-		print FH "time elapsed(sec),pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
+		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
 		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
@@ -262,7 +262,7 @@ if ( $outputfile ne '' ) {
 	if ($args{'ifinfo'}) {
 		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
 	}
-	print FH "$elapsed,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
 	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
 	close outputfile;
 }
