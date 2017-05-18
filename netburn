@@ -26,13 +26,13 @@ my ($essid,$freq,$ap,$bitrate,$quality);
 if ($args{'ifinfo'}) { 
 	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
 	if ($noisy) { 
+		print "\n";
 		print "Interface: $args{'ifinfo'}\n";
 		print "ESSID: $essid\n";
 		print "Frequency: $freq\n";
 		print "AP: $ap\n";
 		print "Bitrate: $bitrate\n";
 		print "Link Quality: $quality\n";
-		print "\n";
 	}
 }
 	
