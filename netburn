@@ -17,6 +17,17 @@ my %args = getargs(@ARGV);
 
 if ($args{'usage'}) { printusage(); exit; }
 
+if ($args{'ifinfo'}) { 
+	my ($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
+	print "ESSID: $essid\n";
+	print "Frequency: $freq\n";
+	print "AP: $ap\n";
+	print "Bitrate: $bitrate\n";
+	print "Link Quality: $quality\n";
+	exit;
+}
+	
+
 # default concurrency value should be 1
 if (!defined $args{'c'}) { $args{'c'} = 1; }
 my $concurrency = $args{'c'};
@@ -340,7 +351,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c');
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
@@ -490,5 +501,49 @@ sub concurrentfetch {
 	1 while -1 != wait;
 
 	return $totalbytesfetched;
+}
+
+sub getifinfo {
+	# get and return wireless interface information
+	my $if = shift;
+
+	my @raw = `/sbin/iwconfig $if 2>/dev/null`;
+	# current iwconfig output format looks like this:
+	#
+	# test0     IEEE 802.11AC  ESSID:"Wirecutter-test"  Nickname:"<WIFI@REALTEK>"
+        #  Mode:Managed  Frequency:5.745 GHz  Access Point: C0:4A:00:0A:AB:C7   
+        #  Bit Rate:867 Mb/s   Sensitivity:0/0  
+        #  Retry:off   RTS thr:off   Fragment thr:off
+        #  Encryption key:****-****-****-****-****-****-****-****   Security mode:open
+        #  Power Management:off
+        #  Link Quality=98/100  Signal level=100/100  Noise level=0/100
+        #  Rx invalid nwid:0  Rx invalid crypt:0  Rx invalid frag:0
+        #  Tx excessive retries:0  Invalid misc:0   Missed beacon:0
+
+	my $essid = $raw[0];
+	$essid =~ s/^.*ESSID:"//;
+	$essid =~ s/".*$//;
+	chomp $essid;
+
+	my $freq = $raw[1];
+	$freq =~ s/^.*Frequency://;
+	$freq =~ s/GHz.*$/GHz/;
+	chomp $freq;
+
+	my $bitrate = $raw[2];
+	$bitrate =~ s/^.*Bit Rate://;
+	$bitrate =~ s/ Mb\/s.*$/ Mbps/;
+	chomp $bitrate;
+
+	my $ap = $raw[1];
+	$ap =~ s/^.*Point: //;
+	chomp $ap;
+
+	my $quality = $raw[6];
+	$quality =~ s/^.*Link Quality=//;
+	$quality =~ s/100.*$/100/;
+	chomp $quality;
+
+	return ($essid,$freq,$ap,$bitrate,$quality);
 }
 
