@@ -17,6 +17,7 @@ Usage:
                 [-h {hostname} ]    ... override system-defined hostname in CSV output
                 [-c {concurrency} ] ... number of concurrent URL fetches to make per 'page' fetch
                 [-q ]               ... quiet (suppress all but CSV output) 
+                [-ifinfo {iface} ]  ... output detailed wifi info about {iface}
                 [--usage ]          ... you're looking at this right now 
 
 Example:
