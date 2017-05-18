@@ -225,10 +225,11 @@ my $latency50 = nearest(0.01, (percentile(0.5,\@latencyarray)) );
 if ($noisy) {
 	print "\n";
 	print "Time elapsed: $elapsed seconds\n";
-	print "Number of pages fetched: $numberfetched\n";
+	print "Number of fetch operations: $numberfetched\n";
+	print "Concurrent clients per fetch operation: $concurrency\n";
 	print "Total data fetched: $totaldatafetched MB\n";
-	print "Mean page length fetched: " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
-	print "Page length maximum deviation: $pagelengthdeviation KB\n";
+	print "Mean fetch length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
+	print "Fetch length maximum deviation: $pagelengthdeviation KB\n";
 	print "Throughput achieved: $throughput Mbps\n";
 	print "Mean latency: $meanlatency ms\n";
 	print "\n";
