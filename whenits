@@ -10,6 +10,9 @@
 
 
 use Time::HiRes qw ( usleep gettimeofday );
+use POSIX 'setsid';
+
+daemonize();
 
 my $exectime = $ARGV[0];
 
@@ -17,19 +20,31 @@ my ($seconds,$microseconds) = gettimeofday();
 my $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
 my $usleeptime = ($exectime - $currenttime) * 1000000;
 
-# give ourselves a 2 tenths of a second window since usleep is only so accurate
+# low cpu power sleep cycle. wake up 200ms early for a higher-power, more accurate wait cycle.
 $usleeptime -= 200000;
-print "Sleeping " . ($usleeptime / 1000000) . " seconds.\n";
 if ($usleeptime>0) { usleep $usleeptime; }
 
+# high power wait cycle. more accurate than usleep
 my $time = time();
 while ($time < $exectime) { $time = time() };
 
-($seconds,$microseconds) = gettimeofday();
-$currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
-print "time is: $currenttime\n";
-
+# Time to wake up now!
 my @args = @ARGV;
 shift @args;
-
 exec @args;
+
+exit 0;
+
+sub daemonize {
+	# fork and run in the background, let foreground parent die.
+
+	# I don't wanna chdir /, that'll break ./ commands!
+	# chdir '/'               	or die "Can't chdir to /: $!";
+
+	open STDIN, '/dev/null' 	or die "Can't read /dev/null: $!";
+	open STDOUT, '>/dev/null'	or die "Can't write to /dev/null: $!";
+	defined(my $pid = fork) 	or die "Can't fork: $!";
+	exit if $pid;
+	setsid                  	or die "Can't start a new session: $!";
+	open STDERR, '>&STDOUT' 	or die "Can't dup stdout: $!";
+}

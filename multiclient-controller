@@ -16,12 +16,20 @@ my $sshcmd = '/usr/bin/ssh';
 # load test configs from multiclient.conf
 tie my %ini, 'Config::IniFiles', ( -file => $conf_file ) or die "FATAL: cannot load $conf_file.";
 
-# populate %devices from $ini{'devices'} for easier access later
-my $server = $ini{'devices'}{'server'};
+# populate %devices,%directives from $ini{'devices'} for easier access later
 my %devices;
+my %directives;
 foreach my $device (keys %{ $ini{'devices'} }) {
-	if ($device ne 'server') { $devices{$device} = $ini{'devices'}{$device}; }
+	$devices{$device} = $ini{'devices'}{$device};
 }
+foreach my $device (keys %{ $ini{'directives'} }) {
+	$directives{$device} = $ini{'directives'}{$device};
+	if ($directives{$device} =~ /^\$/) {
+		# it's an alias, so populate it from the aliases table
+		$directives{$device} = $ini{'aliases'}{$directives{$device}};
+	}
+}
+
 
 # establish SSH control sessions for each device
 foreach my $device (sort keys %devices) { 
@@ -32,7 +40,7 @@ foreach my $device (sort keys %devices) {
 
 # establish clock is synced at each device
 foreach my $device (sort keys %devices) { 
-	my $cmd = "/bin/date $unixtimeformat " . '+%s';
+	my $cmd = "/bin/date +%s";
 	my $now = time();
 	my $sync = `$sshcmd $devices{$device} $cmd`;
 	if ( abs($now - $sync) <2 ) {
@@ -43,5 +51,12 @@ foreach my $device (sort keys %devices) {
 	}
 }
 
-# sample bash loop to wait until unixtime to execute a command: while [[ $date -lt 1494277920 ]] ; do date=`/bin/date +%s`; echo $date; done
-# except that doesn't work worth a shit. Just going to have to use a perl client to run from this server and that's that, I guess.
+my $when = time()+10;
+
+# loop through the directives given
+foreach my $device (sort keys %directives) {
+	#print "$device is at $devices{$device} and needs to whenits $when $directives{$device} .\n";
+	my $cmd = "ssh root\@$devices{$device} whenits $when $directives{$device}";
+	print "$cmd\n";
+	system $cmd;
+}
