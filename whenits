@@ -23,7 +23,9 @@ if (scalar @ARGV < 1 || scalar @ARGV > 2 || $ARGV[0] =~ /usage/i) {
 	print "\n";
 	print "    whenits [-d] {time} {/path/to/command {arg1 arg2 arg3 ...} }\n";
 	print "\n";
-	print "    -d            ... optional: daemonize (fork and run in background)\n";
+	print "    -d            ... optional: daemonize (fork and run in background).\n";
+	print "                      You'll need this if you're scheduling commands\n";
+	print "                      that need to run after the current shell closes.\n";
 	print "\n";
 	print "    time          ... Required. Execution time may be specified in absolute\n";
 	print "                      epoch seconds, or relative to current time -\n";

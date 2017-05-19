@@ -91,12 +91,18 @@ Usage:
 `whenits` is a scheduler with millisecond-or-better precision.  Feed it a desired execution time in Unix epoch seconds, it will do a low-CPU-power sleep until 200ms before execution time, then a high-CPU-power loop to execute as close to the precise epoch time specified as possible.  
 
 ~~~~
-Usage: 
-         whenits {execution time in epoch seconds} {/path/to/command arg1 arg2 arg3...}
+Usage:
 
-Example:
-         me@banshee:~/network-testing$ ./whenits 1494534810 echo "hello world!"
-         Sleeping 2.43815999031067 seconds.
-         time is: 1494534810.003620
-         hello world!
+    whenits [-d] {time} {/path/to/command {arg1 arg2 arg3 ...} }
 
+    -d            ... optional: daemonize (fork and run in background).
+                      You'll need this if you're scheduling commands
+                      that need to run after the current shell closes.
+
+    time          ... Required. Execution time may be specified in absolute
+                      epoch seconds, or relative to current time -
+                      eg now+5s, now+10m, now+2h.
+
+    command       ... the command to be scheduled at {time}, along with
+                      any arguments to be passed to it.
+~~~~
