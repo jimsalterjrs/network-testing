@@ -108,7 +108,7 @@ Usage:
 
 Example:
 
-    you@box:~$ ./whenits now+5s echo Hello world!
+    you@box:~$ whenits now+5s echo Hello world!
 
     Current time is: 1495220901. Executing in 5 seconds, at 1495220906.
 
