@@ -85,6 +85,7 @@ foreach my $client (keys %{ $ini{'clients'} }) {
 
 
 # establish SSH control sessions for each device
+print "Establishing SSH control sessions, and checking clock synchronization on each client...\n";
 foreach my $client (sort keys %clients) { 
 	my $socket = "/tmp/multiclient-$client-" . time();
 	open FH, "$sshcmd -M -S $socket -o ControlPersist=5m $clients{$client} exit |";
@@ -96,9 +97,7 @@ foreach my $client (sort keys %clients) {
 	my $cmd = "/bin/date +%s";
 	my $now = time();
 	my $sync = `$sshcmd $clients{$client} $cmd`;
-	if ( abs($now - $sync) <2 ) {
-		print "Device $client at $clients{$client} is in sync with me.\n";
-	} else {
+	if ( abs($now - $sync) >1 ) {
 		my $delta = $now-$sync;
 		print "Device $client at $clients{$client} is $delta seconds off from my clock.\n";
 		print "Please correct the time at $clients{$client} before attempting to run\n";
@@ -107,8 +106,9 @@ foreach my $client (sort keys %clients) {
 	}
 }
 
-# we'll execute on the client systems in ten seconds
-my $when = time()+10;
+# delay execution for two seconds per directive to execute
+my $delay = (scalar keys %{ $ini{'directives'} }) * 2;
+my $when = time()+$delay;
 
 # populate %clients from $ini{'clients'} for easier access later
 foreach my $client (keys %{ $ini{'directives'} }) {
