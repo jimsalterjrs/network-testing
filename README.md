@@ -46,8 +46,46 @@ Example:
          Min latency: 35 ms
 ~~~~
 
+# net-hydra
+Net-hydra is a multiple client controller which executes a given set of commands on multiple remote machines with an extremely high degree of simultaneity.  Although net-hydra was specifically designed to be used with netburn to simultaneously test a network from multiple devices, but it can be used for scheduling remote execution of any arbitrary command or commands.  It *does*, however, require `whenits` for the execution timing.
+
+Since net-hydra uses SSH command channels, it's usable even without shared passwordless keys on the client machines - you can enter in passwords or key passphrases at runtime, and it'll use the created command channel to schedule the jobs without needing the password/passphrase again.
+
+~~~~
+Usage: net-hydra {configfile}
+
+net-hydra requires a config file specifying [clients], [directives], and optionally
+[aliases], which it uses to schedule jobs to run simultaneously in the very near future
+on multiple client machines.
+
+	# sample nethydra.conf
+	[clients]
+		# list each client device here, by name and as SSH will connect to them.
+		#
+		local0 = root@127.0.0.1
+		local1 = root@127.0.0.2
+	
+	[directives]
+		# These are the command(s) to be run on each client device. Directives
+		# beginning with $ reference lines from the [aliases] section. Any use
+		# of $when, either here or in [aliases], will be replaced with the
+		# scheduled execution time, in Unix epoch seconds.
+		#
+		local0 = $4kstream
+		local1 = /usr/bin/touch /tmp/test-$when.txt
+	
+	[aliases]
+		# Defining aliases here keeps [directives] cleaner, so you can
+		# see what you're doing a little more easily.
+		#
+		$4kstream = netburn -u http://127.0.0.1/1M.bin -r 25 -o /tmp/$when.csv
+	
+net-hydra requires the whenits command to be in the standard path on each client
+machine, for use precisely scheduling the directives to execute simultaneously.
+~~~~
+
 # whenits
-Whenits is a scheduler with millisecond-or-better precision.  Feed it a desired execution time in Unix epoch seconds, it will do a low-CPU-power sleep until 200ms before execution time, then a high-CPU-power loop to execute as close to the precise epoch time specified as possible.  
+`whenits` is a scheduler with millisecond-or-better precision.  Feed it a desired execution time in Unix epoch seconds, it will do a low-CPU-power sleep until 200ms before execution time, then a high-CPU-power loop to execute as close to the precise epoch time specified as possible.  
 
 ~~~~
 Usage: 
