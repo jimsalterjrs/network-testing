@@ -24,7 +24,7 @@ Example:
 
          you@box:~$ netburn -u http://someserver/128K.bin -r 10
 
-         Beginning test: fetching http://someserver/128K.bin at maximum rate 10 Mbps for 30 seconds.
+         Fetching http://someserver/128K.bin at maximum rate 10 Mbps for 30 seconds.
 
          Throughput so far: 10.01 Mbps
          Seconds remaining: 0

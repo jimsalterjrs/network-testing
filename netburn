@@ -87,7 +87,7 @@ $| = 1;
 my $progresstext;
 
 if ($noisy) {
-	print "\nBeginning test: fetching $args{'u'} ";
+	print "\nFetching $args{'u'} ";
 	if ($args{'r'} == -1) {
 		print "at full rate, ";
 	} else {
