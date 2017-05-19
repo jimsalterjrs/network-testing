@@ -9,6 +9,7 @@
 use strict;
 use Config::IniFiles;   # read samba-style conf file
 use Data::Dumper;       # debugging - print contents of hash
+use Time::HiRes qw ( usleep );
 
 my $conf_file = './multiclient.conf';
 my $sshcmd = '/usr/bin/ssh';
@@ -16,18 +17,11 @@ my $sshcmd = '/usr/bin/ssh';
 # load test configs from multiclient.conf
 tie my %ini, 'Config::IniFiles', ( -file => $conf_file ) or die "FATAL: cannot load $conf_file.";
 
-# populate %devices,%directives from $ini{'devices'} for easier access later
+# populate %devices from $ini{'devices'} for easier access later
 my %devices;
 my %directives;
 foreach my $device (keys %{ $ini{'devices'} }) {
 	$devices{$device} = $ini{'devices'}{$device};
-}
-foreach my $device (keys %{ $ini{'directives'} }) {
-	$directives{$device} = $ini{'directives'}{$device};
-	if ($directives{$device} =~ /^\$/) {
-		# it's an alias, so populate it from the aliases table
-		$directives{$device} = $ini{'aliases'}{$directives{$device}};
-	}
 }
 
 
@@ -51,12 +45,41 @@ foreach my $device (sort keys %devices) {
 	}
 }
 
+# we'll execute on the client systems in ten seconds
 my $when = time()+10;
+
+# populate %devices from $ini{'devices'} for easier access later
+foreach my $device (keys %{ $ini{'directives'} }) {
+	$directives{$device} = $ini{'directives'}{$device};
+	if ($directives{$device} =~ /^\$/) {
+		# it's an alias, so populate it from the aliases table
+		$directives{$device} = $ini{'aliases'}{$directives{$device}};
+	}
+	# substitute exection time in for special value $when in the directives
+	$directives{$device} =~ s/\$when/$when/g;
+}
 
 # loop through the directives given
 foreach my $device (sort keys %directives) {
 	#print "$device is at $devices{$device} and needs to whenits $when $directives{$device} .\n";
-	my $cmd = "ssh root\@$devices{$device} whenits $when $directives{$device}";
+	my $cmd = "$sshcmd root\@$devices{$device} whenits $when $directives{$device}";
 	print "$cmd\n";
 	system $cmd;
 }
+
+my $now=time();
+print "Executing on client systems in " . ($when-$now) . " seconds...\n";
+while ($now < $when) { 
+	$now = time(); 
+        # move 1 line up, clear to beginning of that line
+        print "\e[1F";
+        print "\e[K";
+	print "Executing on client systems in " . ($when-$now) . " seconds...\n";
+	usleep 100000; # sleep 100 milliseconds
+}
+
+print "\e[1F";
+print "\e[K";
+print "Client systems executing now.\n";
+	
+exit 0;
