@@ -13,7 +13,7 @@ use POSIX 'setsid';
 my $daemonize;
 my $exectime;
 
-if (scalar @ARGV < 1 || $ARGV[0] =~ /usage/i) {
+if (scalar @ARGV < 1 || $ARGV[0] =~ /usage$/i) {
 	print "\nwhenits is a tool to execute a command at a time in the near future with\n";
 	print "millisecond-or-better precision.\n";
 	print "\n";
