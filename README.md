@@ -108,11 +108,12 @@ Usage:
 
 Example:
 
-    you@box:~$ whenits now+5s echo Hello world!
+    you@box:~$ ./whenits now+5s echo Hello world!
 
-    Current ime is: 1495220609. Executing in 5 seconds, at 1495220614.
+    Current time is: 1495220901. Executing in 5 seconds, at 1495220906.
 
-    WARNING: I'm a foreground task! Use -d if you wanted to daemonize me (so I don't need you connected to me to run the task).
+    WARNING: I'm a foreground task! Use -d if you need to daemonize me (so I don't
+             need you still connected to me when I run the task).
 
     Hello world!
 

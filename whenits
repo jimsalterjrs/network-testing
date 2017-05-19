@@ -76,8 +76,9 @@ if ($exectime < time()) {
 }
 
 if (! $daemonize) { 
-	print "\nCurrent ime is: " . time() . ". Executing in " . ($exectime-time()) . " seconds, at $exectime.\n\n";
-	print "WARNING: I'm a foreground task! Use -d if you wanted to daemonize me (so I don't need you connected to me to run the task).\n\n";
+	print "\nCurrent time is: " . time() . ". Executing in " . ($exectime-time()) . " seconds, at $exectime.\n\n";
+	print "WARNING: I'm a foreground task! Use -d if you need to daemonize me (so I don't\n";
+	print "         need you still connected to me when I run the task).\n\n";
 }
 
 my ($seconds,$microseconds) = gettimeofday();
