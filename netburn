@@ -322,47 +322,6 @@ sub microtime {
 	return $microtime;
 }
 
-sub progressiverate {
-	# take throttleperiod, current time in ms, and a reference to the "fetched" hash, which stores the amount of data fetched at a given millisecond of testing.
-	# that last is slightly confusing: a page will almost never load in a single millisecond, but the array is updated at the time of a fetch completion,
-	# so if a 128KB page completes fetching at millisecond 300, then $fetched->{'300'} == 131072.
-	#
-	# returns value in bits per second.
-	#
-	# not currently using this functionality because I determined it slowed things down wayyyyy too much.
-
-	my $throttleperiod = shift;
-	my $now = shift;
-	my $length = shift;
-	my $latency = shift;
-	
-	my $fetchedthisperiod;
-
-	my $beginperiod = $now - $throttleperiod;
-	if ($beginperiod < 0) { $beginperiod = 0; }
-
-	foreach my $time (keys %$length) {
-		if ($time > $beginperiod) { 
-			my $begin = $time - $latency->{$time};
-			my $thisfetch = $length->{$time}; 
-			if ($begin < $beginperiod) {
-				# we need to throw away some of this page fetch
-				# because it started prior to our throttling sample period
-				my $netburn = $thisfetch / ($latency->{$time});
-				my $invalidtime = $beginperiod-$begin;
-				$thisfetch -= ($invalidtime * $netburn);
-			}
-			$fetchedthisperiod += $thisfetch;
-		}
-	}
-	
-	my $rate;
-	my $thisperiod = $now-$beginperiod; 
-	if ($thisperiod == 0) { $thisperiod = 1; }
-	$rate = $fetchedthisperiod/($thisperiod/1000);
-	return $rate;
-}
-
 sub getargs {
 	my @args = @_;
 	my %args;
