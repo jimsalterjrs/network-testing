@@ -11,7 +11,7 @@ use Config::IniFiles;   # read samba-style conf file
 use Data::Dumper;       # debugging - print contents of hash
 use Time::HiRes qw ( usleep );
 
-my $conf_file = './multiclient.conf';
+my $conf_file = './net-hydra.conf';
 my $sshcmd = '/usr/bin/ssh';
 
 # load test configs from multiclient.conf
