@@ -16,36 +16,32 @@ if (scalar @ARGV != 1) {
 	print "net-hydra requires a config file specifying [clients], [directives], and optionally\n";
 	print "[aliases], which it uses to schedule jobs to run simultaneously in the very near future\n";
 	print "on multiple client machines.\n";
-	print "\n";
-	print "net-hydra requires the whenits command to be in the standard path on each client\n";
-	print "machine, for use precisely scheduling the directives to execute simultaneously.\n";
-	print "\n";
-
 	print qq^
 	# sample nethydra.conf
 	[clients]
-		# list each device name here, in the form user\@machine, as SSH will connect to them.
+		# list each client device here, by name and as SSH will connect to them.
 		#
 		local0 = root\@127.0.0.1
 		local1 = root\@127.0.0.2
 	
 	[directives]
-		# the command sequence to be run on each client device. directives beginning with 
-		# \$ reference lines from the [aliases] section.
-		#
-		# any use of \$when inside aliases or directives will be replaced
-		# with the actual execution time in epoch seconds.
+		# These are the command(s) to be run on each client device. Directives
+		# beginning with \$ reference lines from the [aliases] section. Any use
+		# of \$when, either here or in [aliases], will be replaced with the
+		# scheduled execution time, in Unix epoch seconds.
 		#
 		local0 = \$4kstream
-		local1 = /usr/bin/touch /tmp/test.txt
+		local1 = /usr/bin/touch /tmp/test-\$when.txt
 	
 	[aliases]
-		# Define aliases here. This keeps [directives] cleaner so you can
+		# Defining aliases here keeps [directives] cleaner, so you can
 		# see what you're doing a little more easily.
 		#
 		\$4kstream = netburn -u http://127.0.0.1/1M.bin -r 25 -o /tmp/\$when.csv
 	^;
-
+	print "\n";
+	print "net-hydra requires the whenits command to be in the standard path on each client\n";
+	print "machine, for use precisely scheduling the directives to execute simultaneously.\n";
 	print "\n";
 	print "See https://github.com/jimsalterjrs/network-testing for sample configs and more\n";
 	print "information.\n\n";
