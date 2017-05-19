@@ -94,7 +94,7 @@ if ($noisy) {
 		print "at maximum rate $args{'r'} Mbps";
 	}
 	if ($args{'c'} > 1) {
-		print "(with concurrency $args{'c'})";
+		print " (with concurrency=$args{'c'})";
 	}
 	print ", for $args{'t'} seconds.\n\n";
 }
