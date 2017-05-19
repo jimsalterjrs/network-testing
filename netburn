@@ -525,7 +525,7 @@ sub getifinfo {
 	# get and return wireless interface information
 	my $if = shift;
 
-	my @raw = `/sbin/iwconfig $if 2>/dev/null`;
+	my $text = `/sbin/iwconfig $if 2>/dev/null`;
 	# current iwconfig output format looks like this:
 	#
 	# test0     IEEE 802.11AC  ESSID:"Wirecutter-test"  Nickname:"<WIFI@REALTEK>"
@@ -538,30 +538,27 @@ sub getifinfo {
         #  Rx invalid nwid:0  Rx invalid crypt:0  Rx invalid frag:0
         #  Tx excessive retries:0  Invalid misc:0   Missed beacon:0
 
-	my $essid = $raw[0];
+	$text =~ s/\r?\n/ /g;
+
+	my $essid = $text;
 	$essid =~ s/^.*ESSID:"//;
 	$essid =~ s/".*$//;
-	chomp $essid;
 
-	my $freq = $raw[1];
+	my $freq = $text;
 	$freq =~ s/^.*Frequency://;
 	$freq =~ s/GHz.*$/GHz/;
-	chomp $freq;
 
-	my $bitrate = $raw[2];
+	my $bitrate = $text;
 	$bitrate =~ s/^.*Bit Rate://;
 	$bitrate =~ s/ Mb\/s.*$/ Mbps/;
-	chomp $bitrate;
 
-	my $ap = $raw[1];
+	my $ap = $text;
 	$ap =~ s/^.*Point: //;
-	$ap =~ s/ *$//;
-	chomp $ap;
+	$ap =~ s/ .*$//;
 
-	my $quality = $raw[6];
+	my $quality = $text;
 	$quality =~ s/^.*Link Quality=//;
-	$quality =~ s/100.*$/100/;
-	chomp $quality;
+	$quality =~ s/ .*$//;
 
 	return ($essid,$freq,$ap,$bitrate,$quality);
 }
