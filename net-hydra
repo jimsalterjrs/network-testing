@@ -7,62 +7,128 @@
 # project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
 
 use strict;
-use Config::IniFiles;   # read samba-style conf file
 use Data::Dumper;       # debugging - print contents of hash
 use Time::HiRes qw ( usleep );
 
-my $conf_file = './net-hydra.conf';
+if (scalar @ARGV != 1) {
+	print "Usage: net-hydra {configfile}\n";
+	print "\n";
+	print "net-hydra requires a config file specifying [clients], [directives], and optionally\n";
+	print "[aliases], which it uses to schedule jobs to run simultaneously in the very near future\n";
+	print "on multiple client machines.\n";
+	print "\n";
+	print "net-hydra requires the whenits command to be in the standard path on each client\n";
+	print "machine, for use precisely scheduling the directives to execute simultaneously.\n";
+	print "\n";
+
+	print qq^
+	# sample nethydra.conf
+	[clients]
+		# list each device name here, in the form user\@machine, as SSH will connect to them.
+		#
+		local0 = root\@127.0.0.1
+		local1 = root\@127.0.0.2
+	
+	[directives]
+		# the command sequence to be run on each client device. directives beginning with 
+		# \$ reference lines from the [aliases] section.
+		#
+		# any use of \$when inside aliases or directives will be replaced
+		# with the actual execution time in epoch seconds.
+		#
+		local0 = \$4kstream
+		local1 = /usr/bin/touch /tmp/test.txt
+	
+	[aliases]
+		# Define aliases here. This keeps [directives] cleaner so you can
+		# see what you're doing a little more easily.
+		#
+		\$4kstream = netburn -u http://127.0.0.1/1M.bin -r 25 -o /tmp/\$when.csv
+	^;
+
+	print "\n";
+	print "See https://github.com/jimsalterjrs/network-testing for sample configs and more\n";
+	print "information.\n\n";
+	exit 256;
+}
+
+# If this eval{} succeeds, Config::IniFiles becomes available. If it fails, $inifiles will be false.
+my $inifiles = eval {
+	require Config::IniFiles;
+	Config::IniFiles->import();
+	1;
+};
+
+if (! $inifiles) {
+	# no Config::IniFiles available.  Sadface.  Die with honor now.
+	print "\n";
+	print "net-hydra requires the Perl library Config::IniFiles. You may install it\n";
+	print "using CPAN, or (preferably) from your distribution's repositories.\n";
+	print "\n";
+	print "On Debian/Ubuntu/derivatives, try:\n";
+	print "   sudo apt install libconfig-inifiles-perl\n";
+	print "\n";
+	print "On RedHat/derivatives, try:\n";
+	print "   sudo yum install perl-Config-IniFiles\n";
+	print "\n";
+	exit 256;
+} 
+
+my $conf_file = $ARGV[0];
 my $sshcmd = '/usr/bin/ssh';
 
 # load test configs from multiclient.conf
 tie my %ini, 'Config::IniFiles', ( -file => $conf_file ) or die "FATAL: cannot load $conf_file.";
 
-# populate %devices from $ini{'devices'} for easier access later
-my %devices;
+# populate %clients from $ini{'clients'} for easier access later
+my %clients;
 my %directives;
-foreach my $device (keys %{ $ini{'devices'} }) {
-	$devices{$device} = $ini{'devices'}{$device};
+foreach my $client (keys %{ $ini{'clients'} }) {
+	$clients{$client} = $ini{'clients'}{$client};
 }
 
 
 # establish SSH control sessions for each device
-foreach my $device (sort keys %devices) { 
-	my $socket = "/tmp/multiclient-$device-" . time();
-	open FH, "$sshcmd -M -S $socket -o ControlPersist=5m $devices{$device} exit |";
+foreach my $client (sort keys %clients) { 
+	my $socket = "/tmp/multiclient-$client-" . time();
+	open FH, "$sshcmd -M -S $socket -o ControlPersist=5m $clients{$client} exit |";
 	close FH;
 }
 
 # establish clock is synced at each device
-foreach my $device (sort keys %devices) { 
+foreach my $client (sort keys %clients) { 
 	my $cmd = "/bin/date +%s";
 	my $now = time();
-	my $sync = `$sshcmd $devices{$device} $cmd`;
+	my $sync = `$sshcmd $clients{$client} $cmd`;
 	if ( abs($now - $sync) <2 ) {
-		print "Device $device at $devices{$device} is in sync with me.\n";
+		print "Device $client at $clients{$client} is in sync with me.\n";
 	} else {
 		my $delta = $now-$sync;
-		print "Device $device at $devices{$device} is $delta seconds off from my clock.\n";
+		print "Device $client at $clients{$client} is $delta seconds off from my clock.\n";
+		print "Please correct the time at $clients{$client} before attempting to run\n";
+		print "this job again.\n\n";
+		exit 256;
 	}
 }
 
 # we'll execute on the client systems in ten seconds
 my $when = time()+10;
 
-# populate %devices from $ini{'devices'} for easier access later
-foreach my $device (keys %{ $ini{'directives'} }) {
-	$directives{$device} = $ini{'directives'}{$device};
-	if ($directives{$device} =~ /^\$/) {
+# populate %clients from $ini{'clients'} for easier access later
+foreach my $client (keys %{ $ini{'directives'} }) {
+	$directives{$client} = $ini{'directives'}{$client};
+	if ($directives{$client} =~ /^\$/) {
 		# it's an alias, so populate it from the aliases table
-		$directives{$device} = $ini{'aliases'}{$directives{$device}};
+		$directives{$client} = $ini{'aliases'}{$directives{$client}};
 	}
 	# substitute exection time in for special value $when in the directives
-	$directives{$device} =~ s/\$when/$when/g;
+	$directives{$client} =~ s/\$when/$when/g;
 }
 
 # loop through the directives given
-foreach my $device (sort keys %directives) {
-	#print "$device is at $devices{$device} and needs to whenits $when $directives{$device} .\n";
-	my $cmd = "$sshcmd root\@$devices{$device} whenits $when $directives{$device}";
+foreach my $client (sort keys %directives) {
+	#print "$client is at $clients{$client} and needs to whenits $when $directives{$client} .\n";
+	my $cmd = "$sshcmd $clients{$client} whenits $when $directives{$client}";
 	print "$cmd\n";
 	system $cmd;
 }
