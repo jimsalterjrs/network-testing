@@ -12,13 +12,70 @@
 use Time::HiRes qw ( usleep gettimeofday );
 use POSIX 'setsid';
 
-daemonize();
+my $daemonize;
+my $exectime;
 
-my $exectime = $ARGV[0];
+if (scalar @ARGV < 1 || scalar @ARGV > 2 || $ARGV[0] =~ /usage/i) {
+	print "\nwhenits is a tool to execute a command at a time in the near future with\n";
+	print "millisecond-or-better precision.\n";
+	print "\n";
+	print "Usage:\n";
+	print "\n";
+	print "    whenits [-d] {time} {/path/to/command {arg1 arg2 arg3 ...} }\n";
+	print "\n";
+	print "    -d            ... optional: daemonize (fork and run in background)\n";
+	print "\n";
+	print "    time          ... Required. Execution time may be specified in absolute\n";
+	print "                      epoch seconds, or relative to current time -\n";
+	print "                      eg now+5s, now+10m, now+2h.\n";
+	print "\n";
+	print "    command       ... the command to be scheduled at {time}, along with\n";
+	print "                      any arguments to be passed to it.\n";
+	print "\n";
+	exit 256;
+}
+
+if ($ARGV[0] eq '-d') {
+	$daemonize = 1;
+	$exectime = $ARGV[1];
+} else {
+	$exectime = $ARGV[0];
+}
+
+if ($exectime =~ /^now+/) {
+	$exectime =~ s/^now+//;
+	if ($exectime =~ /s$/) {
+		$exectime =~ s/s$//;
+		$exectime = time() + $exectime;
+	} elsif ($exectime =~ /m$/) {
+		$exectime =~ s/m$//;
+		$exectime = $exectime * 60;
+		$exectime = time() + $exectime;
+	} elsif ($exectime =~ /h$/) {
+		$exectime =~ s/h$//;
+		$exectime = $exectime * 60 * 60;
+		$exectime = time() + $exectime;
+	}
+} elsif (! ($exectime =~ /^[0-9]*$/) ) {
+	print "Sorry, I don't understand $exectime - try an exact time in Unix epoch seconds, or now+30s, now+5m, etc.\n";
+	exit 256;
+}
+
+if ($exectime < time()) {
+	print "Can't execute jobs in the past!\n";
+	exit 256;
+}
+
+if (! $daemonize) { 
+	print "\nTime is " . time() . ", executing in " . ($exectime-time()) . " seconds, at $exectime.\n\n";
+	print "WARNING: I'm a foreground task! Use -d if you wanted to daemonize me (so I don't need you connected to me to run the task).\n\n";
+}
 
 my ($seconds,$microseconds) = gettimeofday();
 my $currenttime = "$seconds." . sprintf ("%.06d", $microseconds);
 my $usleeptime = ($exectime - $currenttime) * 1000000;
+
+if ($daemonize) { daemonize(); }
 
 # low cpu power sleep cycle. wake up 200ms early for a higher-power, more accurate wait cycle.
 $usleeptime -= 200000;

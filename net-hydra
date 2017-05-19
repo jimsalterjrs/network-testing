@@ -124,7 +124,7 @@ foreach my $client (keys %{ $ini{'directives'} }) {
 # loop through the directives given
 foreach my $client (sort keys %directives) {
 	#print "$client is at $clients{$client} and needs to whenits $when $directives{$client} .\n";
-	my $cmd = "$sshcmd $clients{$client} whenits $when $directives{$client}";
+	my $cmd = "$sshcmd $clients{$client} whenits -d $when $directives{$client}";
 	print "$cmd\n";
 	system $cmd;
 }
