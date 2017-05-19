@@ -105,4 +105,15 @@ Usage:
 
     command       ... the command to be scheduled at {time}, along with
                       any arguments to be passed to it.
+
+Example:
+
+    you@box:~$ whenits now+5s echo Hello world!
+
+    Current ime is: 1495220609. Executing in 5 seconds, at 1495220614.
+
+    WARNING: I'm a foreground task! Use -d if you wanted to daemonize me (so I don't need you connected to me to run the task).
+
+    Hello world!
+
 ~~~~

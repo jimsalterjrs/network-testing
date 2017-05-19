@@ -15,7 +15,7 @@ use POSIX 'setsid';
 my $daemonize;
 my $exectime;
 
-if (scalar @ARGV < 1 || scalar @ARGV > 2 || $ARGV[0] =~ /usage/i) {
+if (scalar @ARGV < 1 || $ARGV[0] =~ /usage/i) {
 	print "\nwhenits is a tool to execute a command at a time in the near future with\n";
 	print "millisecond-or-better precision.\n";
 	print "\n";
@@ -40,8 +40,15 @@ if (scalar @ARGV < 1 || scalar @ARGV > 2 || $ARGV[0] =~ /usage/i) {
 if ($ARGV[0] eq '-d') {
 	$daemonize = 1;
 	$exectime = $ARGV[1];
+	# remove first two elements from @ARGV - all remaining is the command
+	# to run and all of its arguments
+	shift @ARGV;
+	shift @ARGV;
 } else {
 	$exectime = $ARGV[0];
+	# remove first element from @ARGV - all remaining is the command
+	# to run and all of its arguments
+	shift @ARGV;
 }
 
 if ($exectime =~ /^now+/) {
@@ -69,7 +76,7 @@ if ($exectime < time()) {
 }
 
 if (! $daemonize) { 
-	print "\nTime is " . time() . ", executing in " . ($exectime-time()) . " seconds, at $exectime.\n\n";
+	print "\nCurrent ime is: " . time() . ". Executing in " . ($exectime-time()) . " seconds, at $exectime.\n\n";
 	print "WARNING: I'm a foreground task! Use -d if you wanted to daemonize me (so I don't need you connected to me to run the task).\n\n";
 }
 
@@ -89,7 +96,6 @@ while ($time < $exectime) { $time = time() };
 
 # Time to wake up now!
 my @args = @ARGV;
-shift @args;
 exec @args;
 
 exit 0;
