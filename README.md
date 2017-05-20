@@ -9,7 +9,7 @@ It's highly recommended to use `ntpd` to keep accurate time on the server and al
 
 ~~~~
 Usage: 
-	net-hydra {configfile}
+	net-hydra -c {configfile} [-t {testname}]
 
 	net-hydra requires a config file specifying [clients], [directives], and optionally
 	[aliases], which it uses to schedule jobs to run simultaneously in the very near future
@@ -26,16 +26,17 @@ Usage:
 			# These are the command(s) to be run on each client device. Directives
 			# beginning with $ reference lines from the [aliases] section. Any use
 			# of $when, either here or in [aliases], will be replaced with the
-			# scheduled execution time, in Unix epoch seconds.
+			# scheduled execution time, in Unix epoch seconds; $testname is replaced
+                        # with the --testname argument passed to net-hydra on the command-line.
 			#
 			local0 = $4kstream
-			local1 = /usr/bin/touch /tmp/test-$when.txt
+			local1 = /usr/bin/touch /tmp/test-$testname-$when.txt
 	
 		[aliases]
 			# Defining aliases here keeps [directives] cleaner, so you can
 			# see what you're doing a little more easily.
 			#
-			$4kstream = netburn -u http://127.0.0.1/1M.bin -r 25 -o /tmp/$when.csv
+			$4kstream = netburn -u http://127.0.0.1/1M.bin -r 25 -o /tmp/$testname-$when.csv
 	
 	net-hydra requires the whenits command to be in the standard path on each client
 	machine, for use precisely scheduling the directives to execute simultaneously.
