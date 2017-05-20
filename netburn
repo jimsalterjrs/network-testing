@@ -24,7 +24,7 @@ my $noisy = (! $args{'q'});
 my ($essid,$freq,$ap,$bitrate,$quality);
 
 if ($args{'ifinfo'}) { 
-	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'if'});
+	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'ifinfo'});
 	if ($noisy) { 
 		print "\n";
 		print "Interface: $args{'ifinfo'}\n";
