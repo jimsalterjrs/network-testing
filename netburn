@@ -263,7 +263,7 @@ if ( $outputfile ne '' ) {
 	if ($args{'ifinfo'}) {
 		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
 	}
-	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched,$meanpagelength,$pagelengthdeviation,$throughput";
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
 	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
 	close outputfile;
 }

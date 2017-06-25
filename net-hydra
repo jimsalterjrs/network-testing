@@ -67,19 +67,19 @@ foreach my $client (sort keys %clients) {
 # establish clock is synced at each device
 foreach my $client (sort keys %clients) { 
 	my $cmd = "/bin/date +%s";
-	my $now = time();
 	my $sync = `$sshcmd $clients{$client} $cmd`;
+	my $now = time();
 	if ( abs($now - $sync) >1 ) {
 		my $delta = $now-$sync;
 		print "Device $client at $clients{$client} is $delta seconds off from my clock.\n";
 		print "Please correct the time at $clients{$client} before attempting to run\n";
 		print "this job again.\n\n";
-		exit 256;
+		exit 255;
 	}
 }
 
 # delay execution for two seconds per directive to execute
-my $delay = (scalar keys %{ $ini{'directives'} }) * 2;
+my $delay = (scalar keys %{ $ini{'directives'} }) * 2 + 10;
 my $when = time()+$delay;
 
 # populate %clients from $ini{'clients'} for easier access later
@@ -125,7 +125,7 @@ exit 0;
 
 
 sub printusage {
-	print "Usage: net-hydra -c {configfile} [-t {testname}]\n";
+	print "Usage: net-hydra -c {configfile} [--testname {testname}]\n";
 	print "\n";
 	print "net-hydra requires a config file specifying [clients], [directives], and optionally\n";
 	print "[aliases], which it uses to schedule jobs to run simultaneously in the very near future\n";
