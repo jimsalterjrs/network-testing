@@ -50,6 +50,7 @@ tie my %ini, 'Config::IniFiles', ( -file => $conf_file ) or die "FATAL: cannot l
 
 # populate %clients from $ini{'clients'} for easier access later
 my %clients;
+my %sockets;
 my %directives;
 foreach my $client (keys %{ $ini{'clients'} }) {
 	$clients{$client} = $ini{'clients'}{$client};
@@ -60,14 +61,16 @@ foreach my $client (keys %{ $ini{'clients'} }) {
 print "Establishing SSH control sessions, and checking clock synchronization on each client...\n";
 foreach my $client (sort keys %clients) { 
 	my $socket = "/tmp/multiclient-$client-" . time();
-	open FH, "$sshcmd -M -S $socket -o ControlPersist=5m $clients{$client} exit |";
+	$sockets{$client} = $socket;
+	print "Establishing control socket for $client...\n";
+	open FH, "$sshcmd -M -S $socket -o ControlPersist=15m $clients{$client} exit |";
 	close FH;
 }
 
 # establish clock is synced at each device
 foreach my $client (sort keys %clients) { 
 	my $cmd = "/bin/date +%s";
-	my $sync = `$sshcmd $clients{$client} $cmd`;
+	my $sync = `$sshcmd -S $sockets{$client} $clients{$client} $cmd`;
 	my $now = time();
 	if ( abs($now - $sync) >1 ) {
 		my $delta = $now-$sync;
@@ -98,8 +101,8 @@ foreach my $client (keys %{ $ini{'directives'} }) {
 # loop through the directives given
 foreach my $client (sort keys %directives) {
 	#print "$client is at $clients{$client} and needs to whenits $when $directives{$client} .\n";
-	my $cmd = "$sshcmd $clients{$client} whenits -d $when $directives{$client}";
-	print "$cmd\n";
+	my $cmd = "$sshcmd -S $sockets{$client} $clients{$client} whenits -d $when $directives{$client}";
+	#print "$cmd\n";
 	system $cmd;
 }
 
