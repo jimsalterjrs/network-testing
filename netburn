@@ -355,6 +355,7 @@ sub printusage {
 	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
 	print "               [--rnd {value} ]    ... sleep random milliseconds up to {value} before each fetch\n";
 	print "                                       (to inject chaos into the timing of fetches)\n";
+	print "               [--percentile {n}]  ... report results at each nth percentile instead of defaults\n";
 	print "\n";
 	print "               [--usage ]          ... you're looking at this right now \n";
 	print "\n";
