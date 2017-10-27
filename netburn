@@ -284,7 +284,7 @@ if ( $outputfile ne '' ) {
 			print FH ",max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)";
 		} else {
 			for (my $p=100 ; $p >=0 ; $p -= $args{'percentile'}) {
-				print FH ",$p\% latency(ms)";
+				print FH ",$p\%";
 			}
 		}
 		print FH ",mean latency(ms)";
