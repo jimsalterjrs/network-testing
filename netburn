@@ -151,7 +151,7 @@ while ($now < $endtime) {
 
 		# get current after-fetch time in microseconds so we can track latency for this request
 		my $aftertime = microtime();
-		my $elapsedms = int(($aftertime-$beforetime)*1000);
+		my $elapsedms = ($aftertime-$beforetime)*1000;
 
 		# update how much data we've fetched so far
 		$pagesfetched ++;
@@ -237,7 +237,7 @@ my $latency99 = nearest(0.1,percentile(0.99,\@latencyarray));
 my $latency95 = nearest(0.1,percentile(0.95,\@latencyarray));
 my $latency90 = nearest(0.1,percentile(0.90,\@latencyarray));
 my $latency75 = nearest(0.1,percentile(0.75,\@latencyarray));
-my $latency50 = nearest(0.01, (percentile(0.5,\@latencyarray)) );
+my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
 
 # humanreadable output
 if ($noisy) {
@@ -287,7 +287,7 @@ if ( $outputfile ne '' ) {
 				print FH ",$p\% latency(ms)";
 			}
 		}
-		print FH "mean latency(ms),random sleep interval(ms)\n"; 
+		print FH ",mean latency(ms),random sleep interval(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
 	my $hostname = $args{'h'};
