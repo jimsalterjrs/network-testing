@@ -263,7 +263,7 @@ if ($noisy) {
 		# print results for each percentile interval specified with --percentile=n
 		for (my $p=100 ; $p>=0 ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
-			print "$p\th percentile latency: $percentile ms\n";
+			print $p . "th percentile latency: $percentile ms\n";
 		}
 	}
 }
