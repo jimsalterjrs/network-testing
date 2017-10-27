@@ -287,7 +287,13 @@ if ( $outputfile ne '' ) {
 				print FH ",$p\% latency(ms)";
 			}
 		}
-		print FH ",mean latency(ms),random sleep interval(ms)\n"; 
+		print FH ",mean latency(ms)";
+
+		if (defined $args{'rnd'}) { 
+			print FH ",random sleep interval(ms)"; 
+		}
+
+		print FH "\n";
 	}
 	my $timestamp = timestamp(int($begin));
 	my $hostname = $args{'h'};
@@ -306,7 +312,13 @@ if ( $outputfile ne '' ) {
 		}
 	}
 
-	print FH ",$meanlatency,$args{'rnd'}\n";
+	print FH ",$meanlatency";
+
+	if (defined $args{'rnd'}) {
+		print FH ",$args{'rnd'}\n";
+	}
+
+	print FH "\n";
 	close outputfile;
 }
 
