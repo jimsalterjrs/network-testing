@@ -251,13 +251,21 @@ if ($noisy) {
 	print "Throughput achieved: $throughput Mbps\n";
 	print "Mean latency: $meanlatency ms\n";
 	print "\n";
-	print "Worst latency: $maxlatency ms\n";
-	print "99th percentile latency: $latency99 ms\n";
-	print "95th percentile latency: $latency95 ms\n";
-	print "90th percentile latency: $latency90 ms\n";
-	print "75th percentile latency: $latency75 ms\n";
-	print "Median latency: $latency50 ms\n";
-	print "Min latency: $minlatency ms\n";
+	if (! defined $args{'percentile'}( {
+		print "Worst latency: $maxlatency ms\n";
+		print "99th percentile latency: $latency99 ms\n";
+		print "95th percentile latency: $latency95 ms\n";
+		print "90th percentile latency: $latency90 ms\n";
+		print "75th percentile latency: $latency75 ms\n";
+		print "Median latency: $latency50 ms\n";
+		print "Min latency: $minlatency ms\n";
+	} else {
+		# print results for each percentile interval specified with --percentile=n
+		for (my $p=100 ; $p<=0 ; $p -= $args{'percentile'}) {
+			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
+			print "$pth percentile latency: $percentile ms\n";
+		}
+	}
 }
 
 # output to logfile in CSV format if -o specified
