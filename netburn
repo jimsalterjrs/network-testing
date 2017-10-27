@@ -74,7 +74,7 @@ my $response;
 # If you want to only have the continuous stuff shown, you can just throw away the
 # first read here.
 #
-# my $page = $http->get($url);
+my $page = $http->get($url);
 
 # store the time at which we begin the test run
 my $begin = microtime();
@@ -261,7 +261,7 @@ if ($noisy) {
 		print "Min latency: $minlatency ms\n";
 	} else {
 		# print results for each percentile interval specified with --percentile=n
-		for (my $p=100 ; $p>=0 ; $p -= $args{'percentile'}) {
+		for (my $p=$args{'maxp'} ; $p>=$args{'minp'} ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
 			print $p . "th percentile latency: $percentile ms\n";
 		}
@@ -283,7 +283,7 @@ if ( $outputfile ne '' ) {
 		if (! defined $args{'percentile'}) {
 			print FH ",max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)";
 		} else {
-			for (my $p=100 ; $p >=0 ; $p -= $args{'percentile'}) {
+			for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
 				print FH ",$p\%";
 			}
 		}
@@ -306,7 +306,7 @@ if ( $outputfile ne '' ) {
 	if (! defined $args{'percentile'}) {
 		print FH ",$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency";
 	} else {
-		for (my $p=100 ; $p >=0 ; $p -= $args{'percentile'}) {
+		for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
 			print FH ",$percentile"
 		}
@@ -367,7 +367,9 @@ sub printusage {
 	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
 	print "               [--rnd {value} ]    ... sleep random milliseconds up to {value} before each fetch\n";
 	print "                                       (to inject chaos into the timing of fetches)\n";
-	print "               [--percentile {n}]  ... report results at each nth percentile instead of defaults\n";
+	print "               [--percentile {n} ] ... report results at each nth percentile instead of defaults\n";
+	print "               [--minp {n} ]       ... begin percentile reporting at nth percentile (default 50)\n";
+	print "               [--maxp {n} ]       ... end percentile reporting at nth percentile (default 100)\n";
 	print "\n";
 	print "               [--usage ]          ... you're looking at this right now \n";
 	print "\n";
@@ -386,7 +388,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','rnd','percentile');
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','rnd','percentile','minp','maxp');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
@@ -467,7 +469,8 @@ sub getargs {
 	$args{'p'} = 0; # progressive throttling is too demanding on the CPU
 	if (!defined $args{'r'}) { $args{'r'} = -1; }
 	if (!defined $args{'t'}) { $args{'t'} = 30; }
-
+	if (!defined $args{'minp'}) { $args{'minp'} = 50; }
+	if (!defined $args{'maxp'}) { $args{'maxp'} = 100; }
 	return %args;
 }
 
