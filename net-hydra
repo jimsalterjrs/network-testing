@@ -59,6 +59,7 @@ foreach my $client (keys %{ $ini{'clients'} }) {
 
 # establish SSH control sessions for each device
 print "Establishing SSH control sessions, and checking clock synchronization on each client...\n";
+
 foreach my $client (sort keys %clients) { 
 	my $socket = "/tmp/multiclient-$client-" . time();
 	$sockets{$client} = $socket;
@@ -70,6 +71,7 @@ foreach my $client (sort keys %clients) {
 # establish clock is synced at each device
 foreach my $client (sort keys %clients) { 
 	my $cmd = "/bin/date +%s";
+	print "Checking time synchronization for $client...\n";
 	my $sync = `$sshcmd -S $sockets{$client} $clients{$client} $cmd`;
 	my $now = time();
 	if ( abs($now - $sync) >1 ) {
@@ -101,6 +103,7 @@ foreach my $client (keys %{ $ini{'directives'} }) {
 # loop through the directives given
 foreach my $client (sort keys %directives) {
 	#print "$client is at $clients{$client} and needs to whenits $when $directives{$client} .\n";
+	print "Scheduling job on $client...\n";
 	my $cmd = "$sshcmd -S $sockets{$client} $clients{$client} whenits -d $when $directives{$client}";
 	#print "$cmd\n";
 	system $cmd;

@@ -33,6 +33,7 @@ if ($args{'ifinfo'}) {
 		print "AP: $ap\n";
 		print "Bitrate: $bitrate\n";
 		print "Link Quality: $quality\n";
+		print "Random delay: $args{'rnd'} ms\n";
 	}
 }
 	
@@ -93,6 +94,9 @@ if ($noisy) {
 	} else {
 		print "at maximum rate $args{'r'} Mbps";
 	}
+	if ($args{'rnd'} > 0) {
+		print " (with random interval $args{'rnd'} ms)";
+	}
 	if ($args{'c'} > 1) {
 		print " (with concurrency=$args{'c'})";
 	}
@@ -102,12 +106,19 @@ if ($noisy) {
 my $pagesfetched;
 
 while ($now < $endtime) {
-	$now = microtime();
 
+	$now = microtime();
 	my $currentrate = $totalfetched / ($now-$begin);
 
 	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
 	if ( ($ratelimit < 0) || ($currentrate < $ratelimit) ) {
+
+		# if random sleep interval specified, sleep $args{'rnd'} milliseconds before next fetch
+		if (defined $args{'rnd'}) {
+			my $microseconds = (int(rand($args{'rnd'}*1000)));
+			usleep $microseconds;
+		}
+				
 		# get current before-fetch time in microseconds so we can track latency for this request
 		my $beforetime = microtime();
 
@@ -164,8 +175,15 @@ while ($now < $endtime) {
 				# sleep for enough ms that the last transfer would have effectively been at $ratelimit
 				my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
 				my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
-				my $timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
-				if ($timetosleep>200) { $timetosleep -= 200; } else { $timetosleep = 0; } # fudge factor to account for loop processing time
+				$timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
+
+				# subtract rand interval if we're doing chaos, so rate limiting doesn't undershoot
+				if (defined $args{'rnd'}) {
+					# interval is in ms, we're sleeping in usec
+					$timetosleep = $timetosleep - ($args{'rnd'}*1000);
+				}
+
+				if ($timetosleep>500) { $timetosleep -= 500; } else { $timetosleep = 0; } # fudge factor to account for loop processing time
 				usleep ($timetosleep);
 			}
 		}
@@ -254,7 +272,7 @@ if ( $outputfile ne '' ) {
 			print FH "interface,essid,frequency,ap,bitrate,linkquality,";
 		}
 		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
-		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)\n"; 
+		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),random sleep interval(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
 	my $hostname = $args{'h'};
@@ -264,7 +282,7 @@ if ( $outputfile ne '' ) {
 		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
 	}
 	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
-	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency\n";
+	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,$args{'rnd'}\n";
 	close outputfile;
 }
 
@@ -299,7 +317,7 @@ sub nearest {
 
 sub printusage {
 	print "\nNetburn is a tool for testing network performance using an HTTP server back-end.\n\n";
-	print "It will fetch an URL for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, fetchrate returns information regarding throughput and latency of requests made.\n\n";
+	print "It will fetch an URL for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, it returns information regarding throughput and latency of requests made.\n\n";
 	print "Usage: netburn -u {url} \n";
 	print "               [-r {rate limit} ]  ... specified in Mbps (default none)\n";
 	print "               [-t {seconds} ]     ... time to run test, default 30 \n";
@@ -311,8 +329,11 @@ sub printusage {
 	print "               [-h {hostname} ]    ... override system-defined hostname in CSV output \n";
 	print "               [-c {concurrency} ] ... number of concurrent URL fetches to make per 'page' fetch\n";
 	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
+	print "               [--rnd {value} ]    ... sleep random milliseconds up to {value} before each fetch\n";
+	print "                                       (to inject chaos into the timing of fetches)\n";
+	print "\n";
 	print "               [--usage ]          ... you're looking at this right now \n";
-	print "\n\n";
+	print "\n";
 	return;
 }
 
@@ -328,7 +349,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo');
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','rnd');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
