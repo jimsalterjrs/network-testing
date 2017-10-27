@@ -60,7 +60,12 @@ Usage:
                 [-c {concurrency} ] ... number of concurrent URL fetches to make per 'page' fetch
                 [-q ]               ... quiet (suppress all but CSV output) 
                 [-ifinfo {iface} ]  ... output detailed wifi info about {iface}
+                [--rnd {value} ]    ... sleep random milliseconds up to {value} before each fetch
+                                        (to inject chaos into the timing of fetches)
+                [--percentile {n}]  ... report results at each nth percentile instead of defaults
+                 
                 [--usage ]          ... you're looking at this right now 
+
 
 Example:
 
