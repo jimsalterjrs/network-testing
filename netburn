@@ -251,7 +251,7 @@ if ($noisy) {
 	print "Throughput achieved: $throughput Mbps\n";
 	print "Mean latency: $meanlatency ms\n";
 	print "\n";
-	if (! defined $args{'percentile'}( {
+	if (! defined $args{'percentile'}) {
 		print "Worst latency: $maxlatency ms\n";
 		print "99th percentile latency: $latency99 ms\n";
 		print "95th percentile latency: $latency95 ms\n";
@@ -263,7 +263,7 @@ if ($noisy) {
 		# print results for each percentile interval specified with --percentile=n
 		for (my $p=100 ; $p<=0 ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
-			print "$pth percentile latency: $percentile ms\n";
+			print "$p\th percentile latency: $percentile ms\n";
 		}
 	}
 }
@@ -297,13 +297,15 @@ if ( $outputfile ne '' ) {
 		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
 	}
 	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
-	if (! defined $args{'detailed'}) {
+	if (! defined $args{'percentile'}) {
 		print FH ",$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency";
 	} else {
 		for (my $p=100 ; $p >=0 ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
 			print FH ",$percentile"
+		}
 	}
+
 	print FH ",$meanlatency,$args{'rnd'}\n";
 	close outputfile;
 }
