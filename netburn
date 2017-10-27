@@ -271,8 +271,15 @@ if ( $outputfile ne '' ) {
 		if ($args{'ifinfo'}) {
 			print FH "interface,essid,frequency,ap,bitrate,linkquality,";
 		}
-		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms),";
-		print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),random sleep interval(ms)\n"; 
+		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),mean latency(ms)";
+		if (! defined $args{'detailed'}) {
+			print FH ",max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)";
+		} else {
+			for (my $p=100 ; $p >=0 ; $p -= 5) {
+				print FH ",$p\% latency(ms)";
+			}
+		}
+		print FH ",random sleep interval(ms)\n"; 
 	}
 	my $timestamp = timestamp(int($begin));
 	my $hostname = $args{'h'};
@@ -281,8 +288,15 @@ if ( $outputfile ne '' ) {
 	if ($args{'ifinfo'}) {
 		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
 	}
-	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
-	print FH ",$meanlatency,$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,$args{'rnd'}\n";
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,$meanlatency";
+	if (! defined $args{'detailed'}) {
+		print FH ",$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency";
+	} else {
+		for (my $p=100 ; $p >=0 ; $p -= 5) {
+			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
+			print FH ",$percentile"
+	}
+	print FH ",$args{'rnd'}\n";
 	close outputfile;
 }
 
