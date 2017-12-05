@@ -283,17 +283,17 @@ if ( $outputfile ne '' ) {
 	if (! $args{'no-header'} ) { 
 		print FH "hostname,timestamp,";
 		if ($args{'ifinfo'}) {
-			print FH "ifchangewarning,interface,essid,frequency,ap,bitrate,linkquality,frequency_after,ap_after,bitrate_after,linkquality_after";
+			print FH "ifchangewarning,interface,essid,frequency,ap,bitrate,linkquality,frequency_after,ap_after,bitrate_after,linkquality_after,";
 		}
-		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps)";
+		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),";
 		if (! defined $args{'percentile'}) {
-			print FH ",max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms)";
+			print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),";
 		} else {
 			for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
-				print FH ",$p\%";
+				print FH "$p\%,";
 			}
 		}
-		print FH ",mean latency(ms),jitter interval(ms)"; 
+		print FH "mean latency(ms),jitter interval(ms)"; 
 		print FH "\n";
 	}
 	my $timestamp = timestamp(int($begin));
@@ -301,20 +301,19 @@ if ( $outputfile ne '' ) {
 	if ($hostname eq '') { $hostname = hostname; }
 	print FH "$hostname,$timestamp,";
 	if ($args{'ifinfo'}) {
-		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,$freq_after,$ap_after,$bitrate_after,$quality_after";
+		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,$freq_after,$ap_after,$bitrate_after,$quality_after,";
 	}
-	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,";
 	if (! defined $args{'percentile'}) {
-		print FH ",$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency";
+		print FH "$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,";
 	} else {
 		for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
 			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
-			print FH ",$percentile"
+			print FH "$percentile,"
 		}
 	}
 
-	print FH ",$meanlatency,$args{'jitter'}\n";
-	print FH "\n";
+	print FH "$meanlatency,$args{'jitter'}\n";
 
 	close outputfile;
 }
