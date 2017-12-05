@@ -95,7 +95,7 @@ if ($noisy) {
 		print "at maximum rate $args{'r'} Mbps";
 	}
 	if ($args{'jitter'} > 0) {
-		print " (with added jitter (max $args{'jitter'} ms)";
+		print " (with added jitter (max $args{'jitter'} ms))";
 	}
 	if ($args{'c'} > 1) {
 		print " (with concurrency=$args{'c'})";
@@ -110,108 +110,104 @@ while ($now < $endtime) {
 	$now = microtime();
 	my $currentrate = $totalfetched / ($now-$begin);
 
-	# only fetch another page if we haven't exceeded the rate limit yet during this throttling period
-	if ( ($ratelimit < 0) || ($currentrate < $ratelimit) ) {
+	# get current before-fetch time in microseconds so we can track latency for this request
+	my $beforetime = microtime();
 
-		# if jitter interval specified, sleep $args{'jitter'} milliseconds before next fetch
-		if ($args{'jitter'} > 0) {
-			my $microseconds = (int(rand($args{'jitter'}*1000)));
-			usleep $microseconds;
-		}
-				
-		# get current before-fetch time in microseconds so we can track latency for this request
-		my $beforetime = microtime();
+	my $bits;
 
-		my $bits;
-
-		# note: concurrency=1 will attempt to use HTTP Keepalives for the ENTIRE session,
-		#       all page fetches, beginning to end.
-		#	
-		#	concurrency=2 or greater, on the other hand, will only use HTTP keepalives
-		#	for each "page" session, ie for each burst of concurrent child fetches.
+	# note: concurrency=1 will attempt to use HTTP Keepalives for the ENTIRE session,
+	#       all page fetches, beginning to end.
+	#	
+	#	concurrency=2 or greater, on the other hand, will only use HTTP keepalives
+	#	for each "page" session, ie for each burst of concurrent child fetches.
+	#
+	#	dammit, this is probably another option I should turn on or off by command
+	#	line arguments isn't it...
+	#
+	if ($concurrency == 1) {
+		# simple fetch of the page 
+		my $response = $http->get($url);
+		my $page = $response->{content};
+		$bits = (length $page) * 8;
+	} else {
+		# concurrent fetch multiple copies of the page.
 		#
-		#	dammit, this is probably another option I should turn on or off by command
-		#	line arguments isn't it...
-		#
-		if ($concurrency == 1) {
-			# simple fetch of the page 
-			my $response = $http->get($url);
-			my $page = $response->{content};
-			$bits = (length $page) * 8;
-		} else {
-			# concurrent fetch multiple copies of the page.
-			#
-			# IMPORTANT NOTE: this will give MUCH lower throughput than single fetch,
-			#                 since the loop binds here until ALL $concurrency children
-			#                 complete their fetches - this simulates loading a page
-			#                 with n different URL references in the page, NOT just
-			#                 hammering a server as hard as possible a la Apachebench -c10!
-			$bits = concurrentfetch($concurrency,$url) * 8;
-		}
+		# IMPORTANT NOTE: this will give MUCH lower throughput than single fetch,
+		#                 since the loop binds here until ALL $concurrency children
+		#                 complete their fetches - this simulates loading a page
+		#                 with n different URL references in the page, NOT just
+		#                 hammering a server as hard as possible a la Apachebench -c10!
+		$bits = concurrentfetch($concurrency,$url) * 8;
+	}
 
-		# get current after-fetch time in microseconds so we can track latency for this request
-		my $aftertime = microtime();
-		my $elapsedms = ($aftertime-$beforetime)*1000;
+	# get current after-fetch time in microseconds so we can track latency for this request
+	my $aftertime = microtime();
+	my $elapsedms = ($aftertime-$beforetime)*1000;
 
-		# update how much data we've fetched so far
-		$pagesfetched ++;
-		$totalfetched += $bits;
+	# update how much data we've fetched so far
+	$pagesfetched ++;
+	$totalfetched += $bits;
 
-		# update %fetched for each ms of this request, with the mean throughput of this request for each ms
-		my $timeslice = int($aftertime*1000);
-		# store latency and length of page of this request for statistics
-		push (@lengtharray,$bits);
-		push (@latencyarray,$elapsedms);
+	# update %fetched for each ms of this request, with the mean throughput of this request for each ms
+	my $timeslice = int($aftertime*1000);
+	# store latency and length of page of this request for statistics
+	push (@lengtharray,$bits);
+	push (@latencyarray,$elapsedms);
 
-		my $elapsedseconds = $aftertime - $beforetime;
-		my $lastxferrate = $bits/$elapsedseconds;
-		
-		# this loop basically just helps avoid unnecessary CPU-thrashing through the main loop, by sleeping for enough microseconds
-		# to get us close to the time to fetch the next page. This also has the effect of keeping the main routine from "bursting"
-		# super fast during a really good throughput period to make up for a period of truly awful throughput, which is good for
-		# what we're really trying to do here: check to see if there are any of those truly awful periods in the first place.
-		if ($ratelimit > 0) {
-			if ($lastxferrate > $ratelimit) {
-				# sleep for enough ms that the last transfer would have effectively been at $ratelimit
-				my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
-				my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
-				$timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
+	my $elapsedseconds = $aftertime - $beforetime;
+	my $lastxferrate = $bits/$elapsedseconds;
+	
+	# this loop basically just helps avoid unnecessary CPU-thrashing through the main loop, by sleeping for enough microseconds
+	# to get us close to the time to fetch the next page. This also has the effect of keeping the main routine from "bursting"
+	# super fast during a really good throughput period to make up for a period of truly awful throughput, which is good for
+	# what we're really trying to do here: check to see if there are any of those truly awful periods in the first place.
+	if ($ratelimit > 0) {
+		if ($lastxferrate > $ratelimit) {
+			# sleep for enough ms that the last transfer would have effectively been at $ratelimit
+			my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
+			my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
+			$timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
 
-				# subtract rand interval if we're doing chaos, so rate limiting doesn't undershoot
-				if ($args{'jitter'} > 0) {
-					# interval is in ms, we're sleeping in usec
-					$timetosleep = $timetosleep - ($args{'jitter'}*1000);
-				}
-
-				if ($timetosleep>500) { $timetosleep -= 500; } else { $timetosleep = 0; } # fudge factor to account for loop processing time
-				usleep ($timetosleep);
+			# if jitter interval specified, add +/- ($args{'jitter'}/2) milliseconds to sleep interval
+			if ($args{'jitter'} > 0) {
+				my $microseconds = (int(rand($args{'jitter'}*1000)));
+				# jitter should range from -jitter/2 to jitter/2, not from 0 to jitter
+				$microseconds = int(($args{'jitter'}*1000/2)-$microseconds);
+				$timetosleep += $microseconds;
 			}
+
+			# make sure we don't try to sleep a negative interval
+			if ($timetosleep > 0) { usleep ($timetosleep); }
 		}
 	}
 
+	# update time to make sure we try our best to avoid running after-the-buzzer tests as much as possible
+	$now = microtime();
 
-	# display current throughput if we just changed second
+	# display current throughput if we just changed second. note that we deliberately do this AFTER sleeping.
+	# if we did it before sleeping, we'd look fast all the way until the end, where we'd suddenly look perfect,
+	# which would throw us off pretty badly and make us wonder what was wrong with the rate limiting.
 	if ($noisy) {
 		if ( int($now) > $lastdisplay ) {
 	
-			if ($lastdisplay > 0) { 
-				if (length $progresstext) {
-					# wipe lines on terminal for refresh with new lines
-					for (my $counter=0; $counter<2 ; $counter++) {
-						# move 1 line up, clear to beginning of that line
-						print "\e[1F";
-						print "\e[K";
-					}
+			if (length $progresstext) {
+				# wipe lines on terminal for refresh with new lines
+				for (my $counter=0; $counter<2 ; $counter++) {
+					# move 1 line up, clear to beginning of that line
+					print "\e[1F";
+					print "\e[K";
 				}
-	
-				my $currentrate = $totalfetched / ($now-$begin);
-				$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
-				$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
-				print $progresstext;
 			}
+
+			my $currentrate = $totalfetched / ($now-$begin);
+			$progresstext = "Throughput so far: " . nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+			$progresstext .= "\nSeconds remaining: " . int($endtime-$now) . "\n";
+			print $progresstext;
+
 			$lastdisplay = int($now);
 		}
 	}
+	
 }
 
 # store the time at which we ended the test run
