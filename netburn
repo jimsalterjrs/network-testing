@@ -217,6 +217,16 @@ while ($now < $endtime) {
 # store the time at which we ended the test run
 my $end = microtime();
 
+# get the after-test interface info if applicable
+my ($essid_after,$freq_after,$ap_after,$bitrate_after,$quality_after);
+my $ifchangewarning = '';
+
+if ($args{'ifinfo'}) {
+        ($essid_after,$freq_after,$ap_after,$bitrate_after,$quality_after) = getifinfo($args{'ifinfo'});
+	# detect changes in interface connection during testing
+	if ( "$freq $ap $bitrate $quality" ne "$freq_after $ap_after $bitrate_after $quality_after" ) { $ifchangewarning = "WARNING!"; }
+}
+
 # re-enable terminal buffering
 $| = 0;
 
@@ -277,7 +287,7 @@ if ( $outputfile ne '' ) {
 	if (! $args{'no-header'} ) { 
 		print FH "hostname,timestamp,";
 		if ($args{'ifinfo'}) {
-			print FH "interface,essid,frequency,ap,bitrate,linkquality,";
+			print FH "ifchangewarning,interface,essid,frequency,ap,bitrate,linkquality,frequency_after,ap_after,bitrate_after,linkquality_after";
 		}
 		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps)";
 		if (! defined $args{'percentile'}) {
@@ -295,7 +305,7 @@ if ( $outputfile ne '' ) {
 	if ($hostname eq '') { $hostname = hostname; }
 	print FH "$hostname,$timestamp,";
 	if ($args{'ifinfo'}) {
-		print FH "$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,";
+		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,$freq_after,$ap_after,$bitrate_after,$quality_after";
 	}
 	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput";
 	if (! defined $args{'percentile'}) {
