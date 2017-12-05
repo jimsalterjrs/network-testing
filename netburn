@@ -283,7 +283,7 @@ if ( $outputfile ne '' ) {
 	if (! $args{'no-header'} ) { 
 		print FH "hostname,timestamp,";
 		if ($args{'ifinfo'}) {
-			print FH "ifchangewarning,interface,essid,frequency,ap,bitrate,linkquality,frequency_after,ap_after,bitrate_after,linkquality_after,";
+			print FH "ifchangewarning,interface,essid,frequency,frequency_after,ap,ap_after,bitrate,bitrate_after,linkquality,linkquality_after,";
 		}
 		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),";
 		if (! defined $args{'percentile'}) {
@@ -301,7 +301,7 @@ if ( $outputfile ne '' ) {
 	if ($hostname eq '') { $hostname = hostname; }
 	print FH "$hostname,$timestamp,";
 	if ($args{'ifinfo'}) {
-		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$ap,$bitrate,$quality,$freq_after,$ap_after,$bitrate_after,$quality_after,";
+		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$freq_after,$ap,$ap_after,$bitrate,$bitrate_after,$quality,$quality_after,";
 	}
 	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,";
 	if (! defined $args{'percentile'}) {
