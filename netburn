@@ -220,7 +220,7 @@ my $ifchangewarning = '';
 if ($args{'ifinfo'}) {
         ($essid_after,$freq_after,$ap_after,$bitrate_after,$quality_after) = getifinfo($args{'ifinfo'});
 	# detect changes in interface connection during testing
-	if ( "$freq $ap $bitrate $quality" ne "$freq_after $ap_after $bitrate_after $quality_after" ) { $ifchangewarning = "WARNING!"; }
+	if ( "$freq $ap $bitrate" ne "$freq_after $ap_after $bitrate_after" ) { $ifchangewarning = "WARNING!"; }
 }
 
 # re-enable terminal buffering
