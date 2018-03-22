@@ -16,7 +16,9 @@
 #	This sets up a dummy SMTP server running as the postfix user, on port 26, which accepts
 #	and silently discards all email sent to it. Man smtp_sink if you have similar but not
 #	exact needs; it can do a fair amount of other stuff likely to be useful to mailburn
-#	users as well.
+#	users as well. In particular, you may want to debug with the -c argument, so you can
+#	verify that mailburn and smtp-sink are each reporting the same number of messages
+#	sent / received.
 #
 #	Note that if you're running smtp-sink on port 26, you'll need to specify --port 26 to
 #	mailburn also!
@@ -259,7 +261,7 @@ my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
 if ($noisy) {
 	print "\n";
 	print "Time elapsed: $elapsed seconds\n";
-	print "Number of messages sent: $numbersent\n";
+	print "Number of messages sent: " . ($numbersent * $concurrency) . "\n";
 	print "Concurrent clients per send operation: $concurrency\n";
 	print "Total data sent: $totaldatasent MB\n";
 	print "Mean message length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
@@ -504,7 +506,7 @@ sub getargs {
 
 	$args{'size'} =~ s/m\s*^//i; # strip any "helpful" M suffix supplied by user
 	$args{'size'} = $args{'size'} * 1024 * 1024; # convert from MB to B
-	if ($args{'size'} == 0) { $args{'size'} = 1; } # servers do NOT like zero-data text body
+	if ($args{'size'} == 0) { $args{'size'} = 100; } # mailservers do NOT like zero-data text body
 
 	return %args;
 }
@@ -549,7 +551,7 @@ sub concurrentsend {
 			sendmail($message, { transport => $transport });
 
 			# ANY print from kid will go to parent, to be read by @stuff = <kidPID>
-			print length $message;
+			print $args{'size'} + 221; # 221 bytes is rough length of headers
 
 			exit; # this kid's job is done, so exit without doing parent stuff that comes next
 		}
