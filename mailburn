@@ -6,6 +6,24 @@
 # from http://www.gnu.org/licenses/gpl-3.0.html on 2014-11-17.  A copy should also be available in this
 # project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
 
+
+# TIPS: You're going to need an SMTP server to receive these things.
+#       If you want to test the mailserver itself, you're set. If you want to test the NETWORK,
+#       I suggest installing postfix on your receiving server, then adding the following line
+#	to /etc/postfix/main.cf:
+# 
+#	header_checks = regexp:/etc/postfix/header_checks
+#
+#	Now create the file /etc/postfix/header_checks, and add the following line:
+#
+#	/mailburn@contoso.com/	DISCARD
+#
+#	This will cause the default --from argument from mailburn to be silently discarded
+#	by your Postfix server, instead of being delivered (and wasting / potentially
+#	bottlenecking on disk storage).
+#
+# PS:	Please don't use this tool to be a jackass. 
+
 use strict;
 use Time::HiRes qw ( usleep gettimeofday );
 
