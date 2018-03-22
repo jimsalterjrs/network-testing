@@ -9,18 +9,17 @@
 
 # TIPS: You're going to need an SMTP server to receive these things.
 #       If you want to test the mailserver itself, you're set. If you want to test the NETWORK,
-#       I suggest installing postfix on your receiving server, then adding the following line
-#	to /etc/postfix/main.cf:
-# 
-#	header_checks = regexp:/etc/postfix/header_checks
+#       I suggest installing postfix on your receiving server, then running smtp_sink on it:
 #
-#	Now create the file /etc/postfix/header_checks, and add the following line:
+#	root@yourserver:~# smtp-sink -u postfix :26 1024
 #
-#	/mailburn@contoso.com/	DISCARD
+#	This sets up a dummy SMTP server running as the postfix user, on port 26, which accepts
+#	and silently discards all email sent to it. Man smtp_sink if you have similar but not
+#	exact needs; it can do a fair amount of other stuff likely to be useful to mailburn
+#	users as well.
 #
-#	This will cause the default --from argument from mailburn to be silently discarded
-#	by your Postfix server, instead of being delivered (and wasting / potentially
-#	bottlenecking on disk storage).
+#	Note that if you're running smtp-sink on port 26, you'll need to specify --port 26 to
+#	mailburn also!
 #
 # PS:	Please don't use this tool to be a jackass. 
 
@@ -416,7 +415,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','size','to','from','host','r','t','o','no-header','q','h','c','ifinfo','jitter','percentile','minp','maxp');
+	push my @validargs, ('usage','size','to','from','host','port','r','t','o','no-header','q','h','c','ifinfo','jitter','percentile','minp','maxp');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
@@ -505,6 +504,7 @@ sub getargs {
 
 	$args{'size'} =~ s/m\s*^//i; # strip any "helpful" M suffix supplied by user
 	$args{'size'} = $args{'size'} * 1024 * 1024; # convert from MB to B
+	if ($args{'size'} == 0) { $args{'size'} = 1; } # servers do NOT like zero-data text body
 
 	return %args;
 }
