@@ -95,6 +95,33 @@ Example:
          Min latency: 35 ms
 ~~~~
 
+# mailburn
+
+Mailburn is a tool for testing network performance using an SMTP server back-end.
+
+It will send emails for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, mailburn simply monitors the number of messages sent so far, compares the total data to the time elapsed (in microseconds), and refuses to send more mail until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, it returns information regarding throughput and latency of emails sent. (NOTE: 'throughput' here only measures the data payload, and does not include message headers or SMTP overhead.) You'll need an SMTP server on the back end; if your goal is to test the server itself, you're set. If your goal is to test the network the SMTP traffic is moving across, I recommend Postfix's [smtp-sink](http://www.postfix.org/smtp-sink.1.html).
+
+~~~~
+Usage: 
+
+         mailburn --to {valid email address} --size {size of data payload in MB} --host {SMTP host to connect to}
+               [--port {port} ]    ... SMTP port (default 25)
+               [-r {rate limit} ]  ... specified in Mbps (default none)
+               [-t {seconds} ]     ... time to run test, default 30 
+               [-o {filespec} ]    ... output filespec for CSV report 
+               [--no-header ]      ... suppress header row of CSV output 
+               [-q ]               ... quiet (suppress all but CSV output) 
+               [-h {hostname} ]    ... override system-defined hostname in CSV output 
+               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}
+               [--jitter {value} ] ... sleep random interval up to {value} ms before each send
+               [--percentile {n} ] ... report results at each nth percentile instead of defaults
+               [--minp {n} ]       ... begin percentile reporting at nth percentile (default 50)
+               [--maxp {n} ]       ... end percentile reporting at nth percentile (default 100)
+
+               [--usage ]          ... you're looking at this right now 
+
+~~~~
+
 # whenits
 `whenits` is a scheduler with millisecond-or-better precision.  Feed it a desired execution time in Unix epoch seconds, it will do a low-CPU-power sleep until 200ms before execution time, then a high-CPU-power loop to execute as close to the precise epoch time specified as possible.  
 
