@@ -106,7 +106,7 @@ You'll need an SMTP server on the back end for mailburn to send its messages to;
 ~~~~
 Usage: 
 
-         mailburn --to {valid email address} --size {size of data payload in MB} --host {SMTP host to connect to}
+         mailburn --to {valid email address} --size {msg payload size in MB} --host {SMTP server}
 
                [--size {MB} ]      ... size of the binary attachment in each message
                [--host {host} ]    ... the SMTP server mailburn should connect to
