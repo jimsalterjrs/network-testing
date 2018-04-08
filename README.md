@@ -99,12 +99,17 @@ Example:
 
 Mailburn is a tool for testing network performance using an SMTP server back-end.
 
-It will send emails for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, mailburn simply monitors the number of messages sent so far, compares the total data to the time elapsed (in microseconds), and refuses to send more mail until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, it returns information regarding throughput and latency of emails sent. (NOTE: 'throughput' here only measures the data payload, and does not include message headers or SMTP overhead.) You'll need an SMTP server on the back end; if your goal is to test the server itself, you're set. If your goal is to test the network the SMTP traffic is moving across, I recommend Postfix's [smtp-sink](http://www.postfix.org/smtp-sink.1.html).
+It will send emails for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, mailburn simply monitors the number of messages sent so far, compares the total data to the time elapsed (in microseconds), and refuses to send more mail until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, it returns information regarding throughput and latency of emails sent. (NOTE: 'throughput' here only measures the data payload, and does not include message headers or SMTP overhead.) 
+
+You'll need an SMTP server on the back end for mailburn to send its messages to; if your goal is to test the server itself, you're set. If your goal is to test the network the SMTP traffic is moving across, I recommend Postfix's [smtp-sink](http://www.postfix.org/smtp-sink.1.html), which silently accepts (and dumps to /dev/null) any and all SMTP traffic.
 
 ~~~~
 Usage: 
 
          mailburn --to {valid email address} --size {size of data payload in MB} --host {SMTP host to connect to}
+
+               [--size {MB} ]      ... size of the binary attachment in each message
+               [--host {host} ]    ... the SMTP server mailburn should connect to
                [--port {port} ]    ... SMTP port (default 25)
                [-r {rate limit} ]  ... specified in Mbps (default none)
                [-t {seconds} ]     ... time to run test, default 30 
