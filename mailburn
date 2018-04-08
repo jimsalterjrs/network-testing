@@ -68,6 +68,11 @@ if ($args{'ifinfo'}) {
 if (!defined $args{'c'}) { $args{'c'} = 1; }
 my $concurrency = $args{'c'};
 
+# locking concurrency to 1 since it doesn't seem to make sense
+# with SMTP like it did with HTTP. The function itself should
+# probably be removed entirely at some point.
+$concurrency = 1;
+
 my $url = $args{'u'};
 
 my $outputfile = $args{'o'};
@@ -261,10 +266,12 @@ my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
 if ($noisy) {
 	print "\n";
 	print "Time elapsed: $elapsed seconds\n";
-	print "Number of messages sent: " . ($numbersent * $concurrency) . "\n";
-	print "Concurrent clients per send operation: $concurrency\n";
+	# print "Number of messages sent: " . ($numbersent * $concurrency) . "\n";
+	print "Number of messages sent: $numbersent \n";
+	# print "Concurrent clients per send operation: $concurrency\n";
 	print "Total data sent: $totaldatasent MB\n";
-	print "Mean message length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
+	# print "Mean message length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
+	print "Mean message length: " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
 	print "Message length maximum deviation: $pagelengthdeviation KB\n";
 	print "Throughput achieved: $throughput Mbps\n";
 	print "Mean latency: $meanlatency ms\n";
@@ -297,7 +304,7 @@ if ( $outputfile ne '' ) {
 		if ($args{'ifinfo'}) {
 			print FH "ifchangewarning,interface,essid,frequency,frequency_after,ap,ap_after,bitrate,bitrate_after,linkquality,linkquality_after,";
 		}
-		print FH "time elapsed(sec),concurrency,messages sent,data sent(MB),mean message length(KB),message length deviation(KB),throughput(Mbps),";
+		print FH "time elapsed(sec),messages sent,data sent(MB),mean message length(KB),message length deviation(KB),throughput(Mbps),";
 		if (! defined $args{'percentile'}) {
 			print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),";
 		} else {
@@ -315,7 +322,7 @@ if ( $outputfile ne '' ) {
 	if ($args{'ifinfo'}) {
 		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$freq_after,$ap,$ap_after,$bitrate,$bitrate_after,$quality,$quality_after,";
 	}
-	print FH "$elapsed,$concurrency,$numbersent,$totaldatasent," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,";
+	print FH "$elapsed,$numbersent,$totaldatasent," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,";
 	if (! defined $args{'percentile'}) {
 		print FH "$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,";
 	} else {
@@ -372,7 +379,10 @@ sub printusage {
 	print "               [--no-header ]      ... suppress header row of CSV output \n";
 	print "               [-q ]               ... quiet (suppress all but CSV output) \n";
 	print "               [-h {hostname} ]    ... override system-defined hostname in CSV output \n";
-	print "               [-c {concurrency} ] ... number of concurrent messages for each 'send' operation\n";
+	# not ready to dyke out the concurrency option entirely yet, but it doesn't really make any sense with SMTP sending anyway.
+	# this would be the parallel send (and wait for all children to finish) model from netburn, which mimics loading a complex HTTP
+	# "page" containing multiple elements.
+	# print "               [-c {concurrency} ] ... number of concurrent messages for each 'send' operation\n";
 	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
 	print "               [--jitter {value} ] ... sleep random interval up to {value} ms before each send\n";
 	print "               [--percentile {n} ] ... report results at each nth percentile instead of defaults\n";
@@ -532,6 +542,10 @@ sub concurrentsend {
 	# concurrentsend (10,$message)
 	# concurrently send 10 copies of the message specified, in parallel,
 	# and return the total amount of data sent by all 10 children.
+	#
+	# note that this doesn't really make a lick of sense with SMTP;
+	# it's code that was pulled in from netburn, where it's used to model
+	# fetching a complex HTML page with multiple elements.
 
 	my $concurrency = shift;
 	my $message = shift;
