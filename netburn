@@ -24,9 +24,13 @@ my $noisy = (! $args{'q'});
 my ($essid,$freq,$ap,$bitrate,$quality);
 
 # generate postdata if --post
-my @formdata;
+my @postdata;
+my $formdata;
 if ($args{'post'}) {
-	$formdata[0] = makepostdata($args{'post'});
+	# POST variable name, POST variable data
+	$postdata[0] = 'p';
+	$postdata[1] = makepostdata($args{'post'});
+	$formdata = \@postdata;
 }
 
 
@@ -135,7 +139,7 @@ while ($now < $endtime) {
 		# simple fetch of the page 
 		my $response;
 		if ($args{'post'}) {
-			$response = $http->post_form($url, $form_data);
+			$response = $http->post_form($url, $formdata);
 		} else {
 			$response = $http->get($url);
 		}
@@ -558,7 +562,7 @@ sub concurrentfetch {
 			# fetch the page
 			my $response;
 			if ($args{'post'}) {
-				$response = $http->post_form($url, $form_data);
+				$response = $http->post_form($url, $formdata);
 			} else {
 				$response = $http->get($url);
 			}
