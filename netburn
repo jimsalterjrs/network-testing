@@ -23,6 +23,13 @@ my $noisy = (! $args{'q'});
 # get test interface wifi info if --ifinfo is set
 my ($essid,$freq,$ap,$bitrate,$quality);
 
+# generate postdata if --post
+my $postdata;
+if ($args{'post'}) {
+	$postdata = makepostdata($args{'post'});
+}
+
+
 if ($args{'ifinfo'}) { 
 	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'ifinfo'});
 	if ($noisy) { 
@@ -320,6 +327,40 @@ if ( $outputfile ne '' ) {
 
 #######################################################################################################
 
+sub makepostdata {
+	my $sizearg = shift;
+	my $rawsize = $sizearg;
+	my $multiplier = $sizearg;
+	my $size;
+
+	# rawsize is the numeric data without the multiplier at the end
+	$rawsize =~ s/[A-Za-z]$//;
+	# multiplier is anything after the numeric data
+	$multiplier =~ s/^\d*//;
+
+	if ($multiplier eq 'M' || $multiplier eq 'm') {
+		$size = $rawsize * 1024 * 1024;
+	} elsif ($multiplier eq 'K' || $multiplier eq 'k') {
+		$size = $rawsize * 1024;
+	} elsif ($multiplier eq '') {
+		$size = $rawsize;
+	} else {
+		# unrecognized multiplier
+		die "CRITICAL ERROR: unrecognized postdata multiplier $multiplier\n";
+	}
+
+	# printable ASCII characters are 32-126
+	my $postdata;
+	# for (0..$size) { $postdata .= chr( int(rand(94) + 32) ); }
+
+ 	open FH, '<', '/dev/urandom' or
+ 		die "Can't access `/dev/urandom': $!\n";
+	read(FH,$postdata,$size);
+	close FH;
+
+	return $postdata;
+}
+
 sub percentile {
 	my $percentile = $_[0];
 	my @unsorted = @{$_[1]};
@@ -383,7 +424,7 @@ sub getargs {
 
 	my %novaluearg;
 	my %validarg;
-	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','jitter','percentile','minp','maxp');
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','jitter','percentile','minp','maxp','post');
 	foreach my $item (@validargs) { $validarg{$item} = 1; }
 
 	push my @novalueargs, ('usage','no-header','q');
