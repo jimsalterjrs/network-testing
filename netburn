@@ -133,7 +133,12 @@ while ($now < $endtime) {
 	#
 	if ($concurrency == 1) {
 		# simple fetch of the page 
-		my $response = $http->get($url);
+		my $response;
+		if ($args{'post'}) {
+			$response = $http->post_form($url, $form_data);
+		} else {
+			$response = $http->get($url);
+		}
 		my $page = $response->{content};
 		$bits = (length $page) * 8;
 	} else {
@@ -551,7 +556,12 @@ sub concurrentfetch {
 			# If I'm here, I'm a kid. So do kid stuff.
 
 			# fetch the page
-			my $response = $http->get($url);
+			my $response;
+			if ($args{'post'}) {
+				$response = $http->post_form($url, $form_data);
+			} else {
+				$response = $http->get($url);
+			}
 			my $page = $response->{content};
 
 			# ANY print from kid will go to parent, to be read by @stuff = <kidPID>
