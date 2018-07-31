@@ -24,9 +24,9 @@ my $noisy = (! $args{'q'});
 my ($essid,$freq,$ap,$bitrate,$quality);
 
 # generate postdata if --post
-my $postdata;
+my @formdata;
 if ($args{'post'}) {
-	$postdata = makepostdata($args{'post'});
+	$formdata[0] = makepostdata($args{'post'});
 }
 
 
