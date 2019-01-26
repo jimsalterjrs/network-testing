@@ -1,4 +1,7 @@
 # interfaces(5) file used by ifup(8) and ifdown(8)
+
+# note: generally better to use Network-Manager and nmcli, really!
+
 # Include files from /etc/network/interfaces.d:
 source-directory /etc/network/interfaces.d
 
