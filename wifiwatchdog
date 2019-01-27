@@ -1,16 +1,10 @@
 #!/usr/bin/perl
 
-# on Ubuntu: apt install liblog-log4perl-perl liblog-dispatch-perl
+# apt install liblog-log4perl-perl liblog-dispatch-perl
 use Log::Log4perl qw(get_logger :levels);
 
-# wifiwatchdog monitors an inability to reach a specified IP,
-# and uses Network-Manager to restart a specified wifi link
-# (which should fix both IP and wifi issues, assuming it can
-# successfully connect to an AP) if necessary. Logs errors
-# to /var/log/syslog if it needs to restart the connection.
-
 # user-defined variable initialization
-my $NETID = "\"your SSID profile name in Network-Manager\"";
+my $NETID = "your Network-Manager wifi profile name";
 my $GATEWAY = "192.168.0.1";
 my $IFNAME = "usbnic0";
 
@@ -32,13 +26,15 @@ $appender->layout($layout);
 $logger->add_appender($appender);
 
 # check for connectivity to network gateway
-my $up = `/bin/ping -c1 $GATEWAY 2>&1`;
+my $up = `/bin/ping -c1 -W1 $GATEWAY 2>&1`;
 
-if ($up =~ "unreachable") {
+if ($up =~ "unreachable" || $up =~ "100% packet loss") {
 	# connection down - bring it back up
-	print `/usr/bin/nmcli c up id $NETID ifname $IFNAME`;
+	print "Connection down - restarting wifi on intel0...\n";
+	print `/usr/bin/nmcli c up id "$NETID" ifname $IFNAME`;
 	$logger->error("monitored wifi restarted");
 	#print `/usr/bin/aplay /usr/share/orage/sounds/Boiling.wav`;
 } else {
-	# connection should be up
+	# connection should be up - nothing to do
 }
+
