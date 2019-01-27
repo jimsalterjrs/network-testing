@@ -1,40 +1,94 @@
 #!/usr/bin/perl
 
-# apt install liblog-log4perl-perl liblog-dispatch-perl
-use Log::Log4perl qw(get_logger :levels);
+use strict;
+use warnings;
 
-# user-defined variable initialization
-my $NETID = "your Network-Manager wifi profile name";
-my $GATEWAY = "192.168.0.1";
-my $IFNAME = "usbnic0";
+# argument processing with Pod::Usage and Getopt::Long
+	my %args;
+	argsinit();
 
-# configure logging
-my $logger = get_logger();
-$logger->level($WARN);
-my $appender = Log::Log4perl::Appender->new(
-	"Log::Dispatch::File",
-	filename => "/var/log/syslog",
-	mode => "append",
-);
-
-# standard syslog format
-my $layout =
-      Log::Log4perl::Layout::PatternLayout->new(
-	"%d %H %F{1}[%P]: %p - %m%n"
-);
-$appender->layout($layout);
-$logger->add_appender($appender);
+# Configure logging
+	my ($logger, $fileappender, $filelayout, $screenappender, $screenlayout);
+	loginit();
 
 # check for connectivity to network gateway
-my $up = `/bin/ping -c1 -W1 $GATEWAY 2>&1`;
+my $up = `/bin/ping -c1 -W1 $args{'gateway'} 2>&1`;
 
 if ($up =~ "unreachable" || $up =~ "100% packet loss") {
 	# connection down - bring it back up
-	print "Connection down - restarting wifi on intel0...\n";
-	print `/usr/bin/nmcli c up id "$NETID" ifname $IFNAME`;
-	$logger->error("monitored wifi restarted");
 	#print `/usr/bin/aplay /usr/share/orage/sounds/Boiling.wav`;
+	$logger->error("could not reach $args{'gateway'}, restarting monitored network $args{'netid'} on interface $args{'ifname'}");
+	my $restart = `/usr/bin/nmcli c up id "$args{'netid'}" ifname $args{'ifname'} 2>&1`;
+	if ($restart =~ 'failed') {
+		$logger->error("failed to restart $args{'netid'} on interface $args{'ifname'}.");
+	} else {
+		$logger->info("successfully restarted $args{'netid'} on interface $args{'ifname'}.");
+	}	
 } else {
 	# connection should be up - nothing to do
+	# this should normally not be output anywhere, since logger is set to INFO and above only
+	$logger->debug("successfully reached $args{'gateway'} - nothing to do.");
 }
+
+exit 0;
+
+##############################################################################################3
+##############################################################################################3
+##############################################################################################3
+##############################################################################################3
+
+sub argsinit {
+	use Pod::Usage;
+	use Getopt::Long qw(:config auto_version auto_help);
+	%args = ('gateway' => '', 'netid' => '', 'ifname' => '', 'quiet' => '');
+	GetOptions(\%args, "gateway|g=s", "netid|n=s", "ifname|i=s", "quiet|q") or pod2usage(2);
+}
+
+sub loginit {
+	# Ubuntu: apt install liblog-log4perl-perl liblog-dispatch-perl
+	use Log::Log4perl qw(get_logger :levels);
+	use Log::Log4perl::Appender::Screen;
+	use Log::Log4perl::Appender::File;
+
+	$logger = Log::Log4perl->get_logger();
+	
+	$screenappender = Log::Log4perl::Appender->new( 
+		'Log::Log4perl::Appender::Screen',
+		stderr => 0,
+	);
+	$screenlayout = Log::Log4perl::Layout::PatternLayout->new( "%p - %m%n" );
+	$screenappender->layout($screenlayout);
+	
+	my $fileappender = Log::Log4perl::Appender->new(
+		'Log::Log4perl::Appender::File',
+		filename => '/var/log/syslog',
+		mode => 'append',
+	);
+	$filelayout = Log::Log4perl::Layout::PatternLayout->new( "%d %H %F{1}[%P]: %p - %m%n" );
+	$fileappender->layout($filelayout);
+
+	$logger->add_appender($fileappender);	
+	if (!$args{'quiet'}) { $logger->add_appender($screenappender); }
+
+	$logger->level($INFO);
+}
+
+__END__
+
+=head1 NAME
+
+wifiwatchdog - wifi connection monitoring and automatic restarting tool, to be used from cron
+
+=head1 SYNOPSIS
+
+ wifiwatchdog -n "[NetID]" -g [IP] -i [ifname]
+
+ SOURCE                Source ZFS dataset. Can be either local or remote
+ TARGET                Target ZFS dataset. Can be either local or remote
+
+Options:
+
+  -n | --netid		Network-Manager profile ID to be monitored. (Usually the SSID itself)
+  -g | --gateway	Address ping for connectivity checks - usually the local gateway
+  -i | --ifname		The network interface to restart the wifi profile on, if it's down
 
