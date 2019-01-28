@@ -1,0 +1,17 @@
+#!/usr/bin/perl
+
+my $delay = $ARGV[0];
+my $charcount = 0;
+
+print "Counting down from $delay seconds: ";
+
+while ($delay > 0) {
+	while ($charcount > 0) { print "\b"; $charcount --; }
+        print "$delay     "; select()->flush();
+	for (my $i=5; $i-- ; $i > 0) { print "\b"; }
+	$charcount = length($delay);
+        sleep 1;
+        $delay --;
+} 
+
+print "\n";
