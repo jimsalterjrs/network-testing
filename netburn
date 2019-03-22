@@ -420,6 +420,7 @@ sub printusage {
 	print "               [--minp {n} ]       ... begin percentile reporting at nth percentile (default 50)\n";
 	print "               [--maxp {n} ]       ... end percentile reporting at nth percentile (default 100)\n";
 	print "\n";
+	print "               [--batch ]          ... only show throughput updates 1/sec, machine-parseable output \n";
 	print "               [--usage ]          ... you're looking at this right now \n";
 	print "\n";
 	return;
