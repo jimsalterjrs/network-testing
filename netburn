@@ -90,15 +90,18 @@ my $page = $http->get($url);
 # store the time at which we begin the test run
 my $begin = microtime();
 
-# counter to let us keep track of when to placate the anxious human watching
-my $lastdisplay;
+# counters to let us keep track of progress second-to-second, to placate the anxious human watching
+my $lastdisplay=microtime();
+my $recentlatency=0;
+my $recentbits=0;
+my $recentlyfetched=0;
 
 # disable terminal buffering so we can do nice progress
 $| = 1;
 
 my $progresstext;
 
-if ($noisy) {
+if ($noisy && ! $args{'batch'}) {
 	print "\nFetching $args{'u'} ";
 	if ($args{'r'} == -1) {
 		print "at full rate";
@@ -114,7 +117,7 @@ if ($noisy) {
 	print ", for $args{'t'} seconds.\n\n";
 }
 
-my $pagesfetched;
+my $pagesfetched=0;
 
 while ($now < $endtime) {
 
@@ -170,6 +173,11 @@ while ($now < $endtime) {
 	push (@lengtharray,$bits);
 	push (@latencyarray,$elapsedms);
 
+	# store them in ephemeral counters for batch/interactive display
+	$recentlyfetched ++;
+	$recentlatency += $elapsedms;
+	$recentbits += $bits;
+
 	my $elapsedseconds = $aftertime - $beforetime;
 	my $lastxferrate = $bits/$elapsedseconds;
 	
@@ -204,9 +212,11 @@ while ($now < $endtime) {
 	# if we did it before sleeping, we'd look fast all the way until the end, where we'd suddenly look perfect,
 	# which would throw us off pretty badly and make us wonder what was wrong with the rate limiting.
 	if ($noisy) {
-		if ( int($now) > $lastdisplay ) {
+		if ( ($now-$lastdisplay) >= 1 ) {
 	
 			if (length $progresstext) {
+				# clean out progresstext for new output
+				$progresstext = '';
 				# wipe lines on terminal for refresh with new lines
 				for (my $counter=0; $counter<2 ; $counter++) {
 					# move 1 line up, clear to beginning of that line
@@ -217,14 +227,22 @@ while ($now < $endtime) {
 				}
 			}
 
-			my $currentrate = $totalfetched / ($now-$begin);
-			if (! $args{'batch'}) { $progresstext = "Throughput so far: "; }
-			$progresstext .= nearest(0.01, ($currentrate/1024/1024)) . " Mbps"; 
+			my $currentrate = $recentbits / ($now-$lastdisplay);
+			if (! $args{'batch'}) { $progresstext = "Current throughput: "; }
+			$progresstext .= nearest(0.01, ($currentrate/1024/1024)) . " Mbps, "; 
+			if (! $args{'batch'}) { $progresstext .= "Current mean latency: "; }
+			$progresstext .= nearest(0.01, ($recentlatency/$recentlyfetched)) . " ms";
 			if (! $args{'batch'}) { $progresstext .= "\nSeconds remaining: " . int($endtime-$now) };
 			$progresstext .= "\n";
-			print $progresstext;
 
-			$lastdisplay = int($now);
+			# don't print progresstext on 0th second to avoid confusing zeroed-out results. zero it out if not printed (for interactive output)
+			if ( ($now-$begin) >= 1) { print $progresstext; } else { $progresstext = ''; }
+
+			# zero out display counters for next display period
+			$recentlyfetched = 0;
+			$recentlatency = 0;
+			$recentbits = 0;
+			$lastdisplay = $now;
 		}
 	}
 	
@@ -266,7 +284,7 @@ my $latency75 = nearest(0.1,percentile(0.75,\@latencyarray));
 my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
 
 # humanreadable output
-if ($noisy) {
+if ($noisy && ! $args{'batch'}) {
 	print "\n";
 	print "Time elapsed: $elapsed seconds\n";
 	print "Number of fetch operations: $numberfetched\n";
