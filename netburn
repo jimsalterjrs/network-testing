@@ -102,7 +102,7 @@ $| = 1;
 my $progresstext;
 
 if ($noisy && ! $args{'batch'}) {
-	print "\nFetching $args{'u'} ";
+	print "Fetching $args{'u'} ";
 	if ($args{'r'} == -1) {
 		print "at full rate";
 	} else {
@@ -114,7 +114,7 @@ if ($noisy && ! $args{'batch'}) {
 	if ($args{'c'} > 1) {
 		print " (with concurrency=$args{'c'})";
 	}
-	print ", for $args{'t'} seconds.\n\n";
+	print ", for $args{'t'} seconds.\n\n\n\n";
 }
 
 my $pagesfetched=0;
@@ -214,29 +214,26 @@ while ($now < $endtime) {
 	if ($noisy) {
 		if ( ($now-$lastdisplay) >= 1 ) {
 	
-			if (length $progresstext) {
-				# clean out progresstext for new output
-				$progresstext = '';
-				# wipe lines on terminal for refresh with new lines
-				for (my $counter=0; $counter<2 ; $counter++) {
-					# move 1 line up, clear to beginning of that line
-					if (! $args{'batch'}) {
-						print "\e[1F";
-						print "\e[K";
-					}
+			# wipe lines on terminal for refresh with new lines
+			for (my $counter=0; $counter<2 ; $counter++) {
+				# move 1 line up, clear to beginning of that line
+				if (! $args{'batch'}) {
+					print "\e[1F";
+					print "\e[K";
 				}
 			}
 
+			my $progresstext;
 			my $currentrate = $recentbits / ($now-$lastdisplay);
-			if (! $args{'batch'}) { $progresstext = "Current throughput: "; }
+			if (! $args{'batch'}) { $progresstext .= "Current throughput: "; }
 			$progresstext .= nearest(0.01, ($currentrate/1024/1024)) . " Mbps, "; 
 			if (! $args{'batch'}) { $progresstext .= "Current mean latency: "; }
 			$progresstext .= nearest(0.01, ($recentlatency/$recentlyfetched)) . " ms";
 			if (! $args{'batch'}) { $progresstext .= "\nSeconds remaining: " . int($endtime-$now) };
 			$progresstext .= "\n";
 
-			# don't print progresstext on 0th second to avoid confusing zeroed-out results. zero it out if not printed (for interactive output)
-			if ( ($now-$begin) >= 1) { print $progresstext; } else { $progresstext = ''; }
+			# don't print progresstext on 0th second to avoid confusing zeroed-out results
+			if ( ($now-$begin) >= 1) { print $progresstext; }
 
 			# zero out display counters for next display period
 			$recentlyfetched = 0;
