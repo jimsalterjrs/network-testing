@@ -65,7 +65,10 @@ my $timelimit = $args{'t'};
 my $now = microtime();
 my $endtime = $now + $timelimit;
 
-my $totalfetched;
+# total bits fetched
+my $totalbitsfetched=0;
+# total non-HTTP 200 status codes received
+my $totalnotokay=0;
 
 # hashes to push data to during the test for statistics later
 my @latencyarray;
@@ -94,7 +97,8 @@ my $begin = microtime();
 my $lastdisplay=microtime();
 my $recentlatency=0;
 my $recentbits=0;
-my $recentlyfetched=0;
+my $recentpagesfetched=0;
+my $recentnotokay=0;
 
 # disable terminal buffering so we can do nice progress
 $| = 1;
@@ -117,17 +121,20 @@ if ($noisy && ! $args{'batch'}) {
 	print ", for $args{'t'} seconds.\n\n\n\n";
 }
 
-my $pagesfetched=0;
+my $totalpagesfetched=0;
 
 while ($now < $endtime) {
 
 	$now = microtime();
-	my $currentrate = $totalfetched / ($now-$begin);
+	my $currentrate = $totalbitsfetched / ($now-$begin);
 
 	# get current before-fetch time in microseconds so we can track latency for this request
 	my $beforetime = microtime();
 
+	# actual content returned, its length in bits, HTTP status code returned
+	my $page;
 	my $bits;
+	my $status;
 
 	# note: concurrency=1 will attempt to use HTTP Keepalives for the ENTIRE session,
 	#       all page fetches, beginning to end.
@@ -146,7 +153,8 @@ while ($now < $endtime) {
 		} else {
 			$response = $http->get($url);
 		}
-		my $page = $response->{content};
+		$page = $response->{content};
+		$status = $response->{status};
 		$bits = (length $page) * 8;
 	} else {
 		# concurrent fetch multiple copies of the page.
@@ -156,16 +164,20 @@ while ($now < $endtime) {
 		#                 complete their fetches - this simulates loading a page
 		#                 with n different URL references in the page, NOT just
 		#                 hammering a server as hard as possible a la Apachebench -c10!
-		$bits = concurrentfetch($concurrency,$url) * 8;
+		($bits,$status) = concurrentfetch($concurrency,$url);
 	}
+
+	# update status counters if we get a response code other than 200 OK
+	# NOTE: failure to connect at all results in HTTP::Tiny returning result code 599
+	if ($status != 200) { $totalnotokay ++; $recentnotokay ++; }
 
 	# get current after-fetch time in microseconds so we can track latency for this request
 	my $aftertime = microtime();
 	my $elapsedms = ($aftertime-$beforetime)*1000;
 
 	# update how much data we've fetched so far
-	$pagesfetched ++;
-	$totalfetched += $bits;
+	$totalpagesfetched ++;
+	$totalbitsfetched += $bits;
 
 	# update %fetched for each ms of this request, with the mean throughput of this request for each ms
 	my $timeslice = int($aftertime*1000);
@@ -174,7 +186,7 @@ while ($now < $endtime) {
 	push (@latencyarray,$elapsedms);
 
 	# store them in ephemeral counters for batch/interactive display
-	$recentlyfetched ++;
+	$recentpagesfetched ++;
 	$recentlatency += $elapsedms;
 	$recentbits += $bits;
 
@@ -228,7 +240,9 @@ while ($now < $endtime) {
 			if (! $args{'batch'}) { $progresstext .= "Current throughput: "; }
 			$progresstext .= nearest(0.01, ($currentrate/1024/1024)) . " Mbps, "; 
 			if (! $args{'batch'}) { $progresstext .= "Current mean latency: "; }
-			$progresstext .= nearest(0.01, ($recentlatency/$recentlyfetched)) . " ms";
+			$progresstext .= nearest(0.01, ($recentlatency/$recentpagesfetched)) . " ms, ";
+			if (! $args{'batch'}) { $progresstext .= "Current HTTP 200: "; }
+			$progresstext .= nearest(0.1, (($recentpagesfetched-$recentnotokay)*100/$recentpagesfetched)) . "% OK";
 			if (! $args{'batch'}) { $progresstext .= "\nSeconds remaining: " . int($endtime-$now) };
 			$progresstext .= "\n";
 
@@ -236,9 +250,10 @@ while ($now < $endtime) {
 			if ( ($now-$begin) >= 1) { print $progresstext; }
 
 			# zero out display counters for next display period
-			$recentlyfetched = 0;
+			$recentpagesfetched = 0;
 			$recentlatency = 0;
 			$recentbits = 0;
+			$recentnotokay = 0;
 			$lastdisplay = $now;
 		}
 	}
@@ -264,13 +279,13 @@ $| = 0;
 # the stats we're going to output
 my $elapsed = nearest(0.1, ($end-$begin));
 my $numberfetched = scalar @latencyarray;
-my $totaldatafetched = nearest(0.1, ($totalfetched/8/1024/1024) );
+my $totaldatafetched = nearest(0.1, ($totalbitsfetched/8/1024/1024) );
 my $meanpagelength = mean(@lengtharray);
 my $medianpagelength = percentile(0.5,\@lengtharray);
 my $minpagelength = min(@lengtharray);
 my $maxpagelength = max(@lengtharray);
 my $pagelengthdeviation = $maxpagelength-$minpagelength;
-my $throughput = nearest(0.1, ($totalfetched/$elapsed/1024/1024) );
+my $throughput = nearest(0.1, ($totalbitsfetched/$elapsed/1024/1024) );
 my $meanlatency = nearest(0.01, (mean(@latencyarray)) );
 my $minlatency = nearest(0.01, (min(@latencyarray)) );
 my $maxlatency = nearest(0.01, (max(@latencyarray)) );
@@ -279,6 +294,7 @@ my $latency95 = nearest(0.1,percentile(0.95,\@latencyarray));
 my $latency90 = nearest(0.1,percentile(0.90,\@latencyarray));
 my $latency75 = nearest(0.1,percentile(0.75,\@latencyarray));
 my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
+my $percentokay = nearest(0.1,(($totalbitsfetched-$totalnotokay)*100/$totalbitsfetched)) . '%';
 
 # humanreadable output
 if ($noisy && ! $args{'batch'}) {
@@ -288,6 +304,7 @@ if ($noisy && ! $args{'batch'}) {
 	print "Concurrent clients per fetch operation: $concurrency\n";
 	print "Total data fetched: $totaldatafetched MB\n";
 	print "Mean fetch length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
+	print "Percent requests returned HTTP 200 OK: $percentokay\n";
 	print "Fetch length maximum deviation: $pagelengthdeviation KB\n";
 	print "Throughput achieved: $throughput Mbps\n";
 	print "Mean latency: $meanlatency ms\n";
@@ -320,7 +337,7 @@ if ( $outputfile ne '' ) {
 		if ($args{'ifinfo'}) {
 			print FH "ifchangewarning,interface,essid,frequency,frequency_after,ap,ap_after,bitrate,bitrate_after,linkquality,linkquality_after,";
 		}
-		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),page length deviation(KB),throughput(Mbps),";
+		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),percentOK,page length deviation(KB),throughput(Mbps),";
 		if (! defined $args{'percentile'}) {
 			print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),";
 		} else {
@@ -338,7 +355,7 @@ if ( $outputfile ne '' ) {
 	if ($args{'ifinfo'}) {
 		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$freq_after,$ap,$ap_after,$bitrate,$bitrate_after,$quality,$quality_after,";
 	}
-	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$pagelengthdeviation,$throughput,";
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$percentokay,$pagelengthdeviation,$throughput,";
 	if (! defined $args{'percentile'}) {
 		print FH "$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,";
 	} else {
@@ -560,7 +577,7 @@ sub timestamp {
 sub concurrentfetch {
 	# concurrentfetch (10,'http://test.com/128K.bin')
 	# concurrently fetch 10 copies of the URL specified, in parallel,
-	# and return the total amount of data fetched by all 10 children.
+	# and return the total amount of data fetched by all 10 children in bits.
 
 	my $concurrency = shift;
 	my $url = shift;
@@ -587,9 +604,11 @@ sub concurrentfetch {
 				$response = $http->get($url);
 			}
 			my $page = $response->{content};
+			my $status = $response->{status};
+			my $length = length $page;
 
 			# ANY print from kid will go to parent, to be read by @stuff = <kidPID>
-			print length $page;
+			print "$length,$status";
 
 			exit; # this kid's job is done, so exit without doing parent stuff that comes next
 		}
@@ -601,15 +620,27 @@ sub concurrentfetch {
 	# instead of immediately reading kids[1]-kids[5] if kids[0] takes longer to complete.
 
 	my $totalbytesfetched;
+	my $totalkids;
+
+	# not totally ideal, but we're going to return an overall status for the concurrent fetch operation.
+	# we default to 200, but if we encounter any non-200 result, we overwrite it with that. This does mean
+	# that we don't really know the difference between one, several, or ALL non-200 results from kids. Oh well.
+	my $aggregatestatus=200;
+
 	foreach my $fh (@kids) {
 		my @lines = <$fh>;
-		$totalbytesfetched += $lines[0];
+		my ($bytes,$status) = split(',',$lines[0]);
+		$totalbytesfetched += $bytes;
+		$totalkids ++;
+		chomp $status;
+		if ($status != 200) { $aggregatestatus = $status; }
 	}
 
 	# "reap the children using wait", whatever the fuck that means? "shouldn't be necessary since we didn't install a signal handler." wonderful.
 	1 while -1 != wait;
 
-	return $totalbytesfetched;
+	my $totalbitsfetched = $totalbytesfetched*8;
+	return ($totalbitsfetched,$aggregatestatus);
 }
 
 sub getifinfo {
