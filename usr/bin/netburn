@@ -7,7 +7,7 @@
 # project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
 
 # include snap directory to find Time::HiRes if necessary
-BEGIN {push @INC, '/snap/netburn/current/etc/perl/'}
+BEGIN {push @INC, '/etc/perl/'}
 
 use strict;
 use Time::HiRes qw ( usleep gettimeofday );
