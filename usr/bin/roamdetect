@@ -1,0 +1,30 @@
+#!/usr/bin/perl
+
+# detect roaming on wifi wlan1
+#
+# note: this assumes that the interface you want to monitor is literally named "wlan1" and 
+# that a .wav file is actually present at /usr/share/sounds/speech-dispatcher/test.wav. If 
+# either of those isn't the case on your machine, adjust as appropriate ... and/or submit a
+# PR to update this poor little utility script to actually accept arguments and do things
+# more intelligently =)
+
+my $ap;
+my $old_ap = `iwconfig wlan1 | grep Frequency`;
+chomp $old_ap;
+$old_ap =~ s/^.*Freq/Freq/;
+print `aplay -q /usr/share/sounds/speech-dispatcher/test.wav`;
+print "starting AP is $old_ap.\n";
+
+do {
+    $ap = `iwconfig wlan1 | grep Frequency`;
+    chomp $ap;
+    $ap =~ s/^.*Freq/Freq/;
+    if ($ap ne $old_ap) {
+        print `aplay -q /usr/share/sounds/speech-dispatcher/test.wav`;
+        print "roamed from $old_ap to $ap!\n";
+        $old_ap = $ap;
+    } else {
+        # print "no change, ap = $ap\n";
+    }
+    sleep 1;
+} while 1;
