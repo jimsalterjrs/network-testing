@@ -1,0 +1,32 @@
+name: netburn
+
+version: '1.01'
+
+summary: Smart network testing/modeling tools
+
+description: |
+  Net-hydra schedules simultaneous execution of 
+  arbitrary tools across multiple machines with
+  millisecond or better precision. Netburn allows
+  modeling of real-world network workloads using
+  an HTTP back-end. Whenits is similar to the at
+  job scheduler, but allows scheduling and 
+  execution with millisecond or better precision
+  and granularity.
+
+confinement: devmode
+
+base: core18
+
+apps:
+  net-hydra:
+    command: net-hydra
+  whenits:
+    command: whenits
+  netburn:
+    command: netburn
+
+parts:
+  netburn:
+    plugin: dump
+    source: https://github.com/jimsalterjrs/network-testing/archive/$SNAPCRAFT_PROJECT_VERSION.tar.gz
