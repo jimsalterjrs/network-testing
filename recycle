@@ -1,6 +1,0 @@
-#!/bin/sh
-
-# to disconnect and reconnect from a wifi network named "testing" using interface named "test0"
-
-/usr/bin/nmcli c down id "testing" ifname test0
-/usr/bin/nmcli c up id "testing" ifname test0
