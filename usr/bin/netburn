@@ -1,0 +1,687 @@
+#!/usr/bin/perl
+
+# (c) 2017-2019 Jim Salter. Licensed GPLv3. netburn --usage for details.
+
+# this software is licensed for use under the Free Software Foundation's GPL v3.0 license, as retrieved
+# from http://www.gnu.org/licenses/gpl-3.0.html on 2014-11-17.  A copy should also be available in this
+# project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
+
+use strict;
+use Time::HiRes qw ( usleep gettimeofday );
+use HTTP::Tiny;
+use List::Util qw ( sum min max );
+use Sys::Hostname;
+
+# process command line arguments
+my %args = getargs(@ARGV);
+
+if ($args{'usage'}) { printusage(); exit; }
+
+# only print stuff to STDOUT if -q is off
+my $noisy = (! $args{'q'});
+
+# get test interface wifi info if --ifinfo is set
+my ($essid,$freq,$ap,$bitrate,$quality);
+
+# generate postdata if --post
+my @postdata;
+my $formdata;
+if ($args{'post'}) {
+	# POST variable name, POST variable data
+	$postdata[0] = 'p';
+	$postdata[1] = makepostdata($args{'post'});
+	$formdata = \@postdata;
+}
+
+
+if ($args{'ifinfo'}) { 
+	($essid,$freq,$ap,$bitrate,$quality) = getifinfo($args{'ifinfo'});
+	if ($noisy && ! $args{'batch'}) { 
+		print "\n";
+		print "Interface: $args{'ifinfo'}\n";
+		print "ESSID: $essid\n";
+		print "Frequency: $freq\n";
+		print "AP: $ap\n";
+		print "Bitrate: $bitrate\n";
+		print "Link Quality: $quality\n";
+		print "Injected Jitter: up to $args{'jitter'} ms\n";
+	}
+}
+	
+
+# default concurrency value should be 1
+if (!defined $args{'c'}) { $args{'c'} = 1; }
+my $concurrency = $args{'c'};
+
+my $url = $args{'u'};
+
+my $outputfile = $args{'o'};
+
+# we're going to track the rate limit in bits per second,
+# even though we specified it in Mbps on the command line.
+my $ratelimit = ($args{'r'} * 1024 * 1024);
+my $timelimit = $args{'t'};
+
+my $now = microtime();
+my $endtime = $now + $timelimit;
+
+# total bits fetched
+my $totalbitsfetched=0;
+# total non-HTTP 200 status codes received
+my $totalnotokay=0;
+
+# hashes to push data to during the test for statistics later
+my @latencyarray;
+my @lengtharray;
+
+# set the throttling period in ms - how much history
+# we look at before deciding whether to start
+# another page fetch or not. Will be selectable
+# from CLI later.
+my $throttleperiod = $args{'p'};
+
+# set up variables for OO invocation of HTTP::Tiny, with HTTP timeout at 5 seconds
+my $http = HTTP::Tiny->new (Timeout => 5);
+my $response;
+
+# There's about a +30ms penalty on the first read of the series, for whatever reason.
+# If you want to only have the continuous stuff shown, you can just throw away the
+# first read here.
+#
+my $page = $http->get($url);
+
+# store the time at which we begin the test run
+my $begin = microtime();
+
+# counters to let us keep track of progress second-to-second, to placate the anxious human watching
+my $lastdisplay=microtime();
+my $recentlatency=0;
+my $recentbits=0;
+my $recentpagesfetched=0;
+my $recentnotokay=0;
+
+# disable terminal buffering so we can do nice progress
+$| = 1;
+
+my $progresstext;
+
+if ($noisy && ! $args{'batch'}) {
+	print "Fetching $args{'u'} ";
+	if ($args{'r'} == -1) {
+		print "at full rate";
+	} else {
+		print "at maximum rate $args{'r'} Mbps";
+	}
+	if ($args{'jitter'} > 0) {
+		print " (with added jitter (max $args{'jitter'} ms))";
+	}
+	if ($args{'c'} > 1) {
+		print " (with concurrency=$args{'c'})";
+	}
+	print ", for $args{'t'} seconds.\n\n\n\n";
+}
+
+my $totalpagesfetched=0;
+
+while ($now < $endtime) {
+
+	$now = microtime();
+	my $currentrate = $totalbitsfetched / ($now-$begin);
+
+	# get current before-fetch time in microseconds so we can track latency for this request
+	my $beforetime = microtime();
+
+	# actual content returned, its length in bits, HTTP status code returned
+	my $page;
+	my $bits;
+	my $status;
+
+	# note: concurrency=1 will attempt to use HTTP Keepalives for the ENTIRE session,
+	#       all page fetches, beginning to end.
+	#	
+	#	concurrency=2 or greater, on the other hand, will only use HTTP keepalives
+	#	for each "page" session, ie for each burst of concurrent child fetches.
+	#
+	#	dammit, this is probably another option I should turn on or off by command
+	#	line arguments isn't it...
+	#
+	if ($concurrency == 1) {
+		# simple fetch of the page 
+		my $response;
+		if ($args{'post'}) {
+			$response = $http->post_form($url, $formdata);
+		} else {
+			$response = $http->get($url);
+		}
+		$page = $response->{content};
+		$status = $response->{status};
+		$bits = (length $page) * 8;
+	} else {
+		# concurrent fetch multiple copies of the page.
+		#
+		# IMPORTANT NOTE: this will give MUCH lower throughput than single fetch,
+		#                 since the loop binds here until ALL $concurrency children
+		#                 complete their fetches - this simulates loading a page
+		#                 with n different URL references in the page, NOT just
+		#                 hammering a server as hard as possible a la Apachebench -c10!
+		($bits,$status) = concurrentfetch($concurrency,$url);
+	}
+
+	# update status counters if we get a response code other than 200 OK
+	# NOTE: failure to connect at all results in HTTP::Tiny returning result code 599
+	if ($status != 200) { $totalnotokay ++; $recentnotokay ++; }
+
+	# get current after-fetch time in microseconds so we can track latency for this request
+	my $aftertime = microtime();
+	my $elapsedms = ($aftertime-$beforetime)*1000;
+
+	# update how much data we've fetched so far
+	$totalpagesfetched ++;
+	$totalbitsfetched += $bits;
+
+	# update %fetched for each ms of this request, with the mean throughput of this request for each ms
+	my $timeslice = int($aftertime*1000);
+	# store latency and length of page of this request for statistics
+	push (@lengtharray,$bits);
+	push (@latencyarray,$elapsedms);
+
+	# store them in ephemeral counters for batch/interactive display
+	$recentpagesfetched ++;
+	$recentlatency += $elapsedms;
+	$recentbits += $bits;
+
+	my $elapsedseconds = $aftertime - $beforetime;
+	my $lastxferrate = $bits/$elapsedseconds;
+	
+	# this loop basically just helps avoid unnecessary CPU-thrashing through the main loop, by sleeping for enough microseconds
+	# to get us close to the time to fetch the next page. This also has the effect of keeping the main routine from "bursting"
+	# super fast during a really good throughput period to make up for a period of truly awful throughput, which is good for
+	# what we're really trying to do here: check to see if there are any of those truly awful periods in the first place.
+	if ($ratelimit > 0) {
+		if ($lastxferrate > $ratelimit) {
+			# sleep for enough ms that the last transfer would have effectively been at $ratelimit
+			my $desiredlatency = $bits / $ratelimit; # bits / bits per second = seconds
+			my $timetosleep = $desiredlatency-$elapsedseconds; # sleep this long now pls
+			$timetosleep = $timetosleep * 1000 * 1000; #seconds --> milliseconds --> microseconds
+
+			# if jitter interval specified, add +/- ($args{'jitter'}/2) milliseconds to sleep interval
+			if ($args{'jitter'} > 0) {
+				my $microseconds = (int(rand($args{'jitter'}*1000)));
+				# jitter should range from -jitter/2 to jitter/2, not from 0 to jitter
+				$microseconds = int(($args{'jitter'}*1000/2)-$microseconds);
+				$timetosleep += $microseconds;
+			}
+
+			# make sure we don't try to sleep a negative interval
+			if ($timetosleep > 0) { usleep ($timetosleep); }
+		}
+	}
+
+	# update time to make sure we try our best to avoid running after-the-buzzer tests as much as possible
+	$now = microtime();
+
+	# display current throughput if we just changed second. note that we deliberately do this AFTER sleeping.
+	# if we did it before sleeping, we'd look fast all the way until the end, where we'd suddenly look perfect,
+	# which would throw us off pretty badly and make us wonder what was wrong with the rate limiting.
+	if ($noisy) {
+		if ( ($now-$lastdisplay) >= 1 ) {
+	
+			# wipe lines on terminal for refresh with new lines
+			for (my $counter=0; $counter<2 ; $counter++) {
+				# move 1 line up, clear to beginning of that line
+				if (! $args{'batch'}) {
+					print "\e[1F";
+					print "\e[K";
+				}
+			}
+
+			my $progresstext;
+			my $currentrate = $recentbits / ($now-$lastdisplay);
+			if (! $args{'batch'}) { $progresstext .= "Current throughput: "; }
+			$progresstext .= nearest(0.01, ($currentrate/1024/1024)) . " Mbps, "; 
+			if (! $args{'batch'}) { $progresstext .= "Current mean latency: "; }
+			$progresstext .= nearest(0.01, ($recentlatency/$recentpagesfetched)) . " ms, ";
+			if (! $args{'batch'}) { $progresstext .= "Current HTTP 200: "; }
+			$progresstext .= nearest(0.1, (($recentpagesfetched-$recentnotokay)*100/$recentpagesfetched)) . "% OK";
+			if (! $args{'batch'}) { $progresstext .= "\nSeconds remaining: " . int($endtime-$now) };
+			$progresstext .= "\n";
+
+			# don't print progresstext on 0th second to avoid confusing zeroed-out results
+			if ( ($now-$begin) >= 1) { print $progresstext; }
+
+			# zero out display counters for next display period
+			$recentpagesfetched = 0;
+			$recentlatency = 0;
+			$recentbits = 0;
+			$recentnotokay = 0;
+			$lastdisplay = $now;
+		}
+	}
+	
+}
+
+# store the time at which we ended the test run
+my $end = microtime();
+
+# get the after-test interface info if applicable
+my ($essid_after,$freq_after,$ap_after,$bitrate_after,$quality_after);
+my $ifchangewarning = '';
+
+if ($args{'ifinfo'}) {
+        ($essid_after,$freq_after,$ap_after,$bitrate_after,$quality_after) = getifinfo($args{'ifinfo'});
+	# detect changes in interface connection during testing
+	if ( "$freq $ap $bitrate" ne "$freq_after $ap_after $bitrate_after" ) { $ifchangewarning = "WARNING!"; }
+}
+
+# re-enable terminal buffering
+$| = 0;
+
+# the stats we're going to output
+my $elapsed = nearest(0.1, ($end-$begin));
+my $numberfetched = scalar @latencyarray;
+my $totaldatafetched = nearest(0.1, ($totalbitsfetched/8/1024/1024) );
+my $meanpagelength = mean(@lengtharray);
+my $medianpagelength = percentile(0.5,\@lengtharray);
+my $minpagelength = min(@lengtharray);
+my $maxpagelength = max(@lengtharray);
+my $pagelengthdeviation = $maxpagelength-$minpagelength;
+my $throughput = nearest(0.1, ($totalbitsfetched/$elapsed/1024/1024) );
+my $meanlatency = nearest(0.01, (mean(@latencyarray)) );
+my $minlatency = nearest(0.01, (min(@latencyarray)) );
+my $maxlatency = nearest(0.01, (max(@latencyarray)) );
+my $latency99 = nearest(0.1,percentile(0.99,\@latencyarray));
+my $latency95 = nearest(0.1,percentile(0.95,\@latencyarray));
+my $latency90 = nearest(0.1,percentile(0.90,\@latencyarray));
+my $latency75 = nearest(0.1,percentile(0.75,\@latencyarray));
+my $latency50 = nearest(0.1, (percentile(0.5,\@latencyarray)) );
+my $percentokay = nearest(0.1,(($totalbitsfetched-$totalnotokay)*100/$totalbitsfetched)) . '%';
+
+# humanreadable output
+if ($noisy && ! $args{'batch'}) {
+	print "\n";
+	print "Time elapsed: $elapsed seconds\n";
+	print "Number of fetch operations: $numberfetched\n";
+	print "Concurrent clients per fetch operation: $concurrency\n";
+	print "Total data fetched: $totaldatafetched MB\n";
+	print "Mean fetch length (total, all $concurrency clients): " . nearest(0.1,($meanpagelength/8/1024)) . " KB\n";
+	print "Percent requests returned HTTP 200 OK: $percentokay\n";
+	print "Fetch length maximum deviation: $pagelengthdeviation KB\n";
+	print "Throughput achieved: $throughput Mbps\n";
+	print "Mean latency: $meanlatency ms\n";
+	print "\n";
+	if (! defined $args{'percentile'}) {
+		print "Worst latency: $maxlatency ms\n";
+		print "99th percentile latency: $latency99 ms\n";
+		print "95th percentile latency: $latency95 ms\n";
+		print "90th percentile latency: $latency90 ms\n";
+		print "75th percentile latency: $latency75 ms\n";
+		print "Median latency: $latency50 ms\n";
+		print "Min latency: $minlatency ms\n";
+	} else {
+		# print results for each percentile interval specified with --percentile=n
+		for (my $p=$args{'maxp'} ; $p>=$args{'minp'} ; $p -= $args{'percentile'}) {
+			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
+			print $p . "th percentile latency: $percentile ms\n";
+		}
+	}
+}
+
+# output to logfile in CSV format if -o specified
+if ( $outputfile ne '' ) {
+
+	if ($noisy) { print "\n"; }
+
+	open FH, ">> $outputfile";
+	if (! $args{'no-header'} ) { 
+		print FH "hostname,timestamp,";
+		if ($args{'ifinfo'}) {
+			print FH "ifchangewarning,interface,essid,frequency,frequency_after,ap,ap_after,bitrate,bitrate_after,linkquality,linkquality_after,";
+		}
+		print FH "time elapsed(sec),concurrency,pages fetched,data fetched(MB),mean page length(KB),percentOK,page length deviation(KB),throughput(Mbps),";
+		if (! defined $args{'percentile'}) {
+			print FH "max latency(ms),99%latency(ms),95%latency(ms),90%latency(ms),75%latency(ms),median latency(ms),min latency(ms),";
+		} else {
+			for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
+				print FH "$p\%,";
+			}
+		}
+		print FH "mean latency(ms),jitter interval(ms)"; 
+		print FH "\n";
+	}
+	my $timestamp = timestamp(int($begin));
+	my $hostname = $args{'h'};
+	if ($hostname eq '') { $hostname = hostname; }
+	print FH "$hostname,$timestamp,";
+	if ($args{'ifinfo'}) {
+		print FH "$ifchangewarning,$args{'ifinfo'},$essid,$freq,$freq_after,$ap,$ap_after,$bitrate,$bitrate_after,$quality,$quality_after,";
+	}
+	print FH "$elapsed,$concurrency,$numberfetched,$totaldatafetched," . nearest(0.1,$meanpagelength/8/1024) . ",$percentokay,$pagelengthdeviation,$throughput,";
+	if (! defined $args{'percentile'}) {
+		print FH "$maxlatency,$latency99,$latency95,$latency90,$latency75,$latency50,$minlatency,";
+	} else {
+		for (my $p=$args{'maxp'} ; $p >= $args{'minp'} ; $p -= $args{'percentile'}) {
+			my $percentile = nearest(0.1,percentile(($p/100),\@latencyarray));
+			print FH "$percentile,"
+		}
+	}
+
+	print FH "$meanlatency,$args{'jitter'}\n";
+
+	close outputfile;
+}
+
+#######################################################################################################
+
+sub makepostdata {
+	my $sizearg = shift;
+	my $rawsize = $sizearg;
+	my $multiplier = $sizearg;
+	my $size;
+
+	# rawsize is the numeric data without the multiplier at the end
+	$rawsize =~ s/[A-Za-z]$//;
+	# multiplier is anything after the numeric data
+	$multiplier =~ s/^\d*//;
+
+	if ($multiplier eq 'M' || $multiplier eq 'm') {
+		$size = $rawsize * 1024 * 1024;
+	} elsif ($multiplier eq 'K' || $multiplier eq 'k') {
+		$size = $rawsize * 1024;
+	} elsif ($multiplier eq '') {
+		$size = $rawsize;
+	} else {
+		# unrecognized multiplier
+		die "CRITICAL ERROR: unrecognized postdata multiplier $multiplier\n";
+	}
+
+	# printable ASCII characters are 32-126
+	my $postdata;
+	# for (0..$size) { $postdata .= chr( int(rand(94) + 32) ); }
+
+ 	open FH, '<', '/dev/urandom' or
+ 		die "Can't access `/dev/urandom': $!\n";
+	read(FH,$postdata,$size);
+	close FH;
+
+	return $postdata;
+}
+
+sub percentile {
+	my $percentile = $_[0];
+	my @unsorted = @{$_[1]};
+
+	my @sorted = sort { $a <=> $b } @unsorted;
+	my $index = ((scalar @sorted) -1) * $percentile;
+	$index = int ($index + 0.5);
+	return $sorted[$index];
+}
+
+sub mean {
+	my $result;
+	foreach (@_) { $result += $_ }
+	return $result / @_;
+}
+
+sub nearest {
+	# nearest (.1, 2.054) = 2.1
+	my $nearest = shift;
+	my $num = shift;
+
+	$num = $num / $nearest;
+	$num = int ($num + 0.5);
+	$num = $num * $nearest;
+	return $num;
+}
+
+sub printusage {
+	print "\nNetburn is a tool for testing network performance using an HTTP server back-end.\n\n";
+	print "It will fetch an URL for a given number of seconds, but can limit itself to a given rate in Mbps. Rather than throttling the network connection itself, netburn simply monitors the number of bits received so far, compares it to the time elapsed (in microseconds), and refuses to fetch more pages until the rate so far is at or below the specified rate limit. After testing for the number of seconds requested, it returns information regarding throughput and latency of requests made.\n\n";
+	print "Usage: netburn -u {url} \n";
+	print "               [-r {rate limit} ]  ... specified in Mbps (default none)\n";
+	print "               [-t {seconds} ]     ... time to run test, default 30 \n";
+	# disabling progressive throttling due to unreasonable CPU load
+	# print "-p [throttling sample period in ms] ";
+	print "               [-o {filespec} ]    ... output filespec for CSV report \n";
+	print "               [--no-header ]      ... suppress header row of CSV output \n";
+	print "               [-q ]               ... quiet (suppress all but CSV output) \n";
+	print "               [-h {hostname} ]    ... override system-defined hostname in CSV output \n";
+	print "               [-c {concurrency} ] ... number of concurrent URL fetches to make per 'page' fetch\n";
+	print "               [-ifinfo {iface} ]  ... output detailed wifi info about {iface}\n";
+	print "               [--jitter {value} ] ... sleep random interval up to {value} ms before each fetch\n";
+	print "               [--percentile {n} ] ... report results at each nth percentile instead of defaults\n";
+	print "               [--minp {n} ]       ... begin percentile reporting at nth percentile (default 50)\n";
+	print "               [--maxp {n} ]       ... end percentile reporting at nth percentile (default 100)\n";
+	print "\n";
+	print "               [--batch ]          ... only show throughput updates 1/sec, machine-parseable output \n";
+	print "               [--usage ]          ... you're looking at this right now \n";
+	print "\n";
+	return;
+}
+
+sub microtime {
+	my ($seconds,$microseconds) = gettimeofday();
+	my $microtime = "$seconds." . sprintf ("%.06d", $microseconds);
+	return $microtime;
+}
+
+sub getargs {
+	my @args = @_;
+	my %args;
+
+	my %novaluearg;
+	my %validarg;
+	push my @validargs, ('usage','u','r','t','o','no-header','q','h','c','ifinfo','jitter','percentile','minp','maxp','post','batch');
+	foreach my $item (@validargs) { $validarg{$item} = 1; }
+
+	push my @novalueargs, ('usage','no-header','q','batch');
+	foreach my $item (@novalueargs) { $novaluearg{$item} = 1; }
+
+	push my @mandatoryargs, ('u');
+
+	# if user specified no args at all, force --usage on
+	if (scalar @args == 0) { $args{'usage'}=1; }
+
+	while (my $rawarg = shift(@args)) {
+		my $arg = $rawarg;
+		my $argvalue = '';
+		if ($rawarg =~ /=/) {
+			# user specified the value for a CLI argument with =
+			# instead of with blank space. separate appropriately.
+			$argvalue = $arg;
+			$arg =~ s/=.*$//;
+			$argvalue =~ s/^.*=//;
+		}
+		if ($rawarg =~ /^--/) {
+			# doubledash arg
+			$arg =~ s/^--//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} elsif ($arg =~ /^-/) {
+			# singledash arg
+			$arg =~ s/^-//;
+			if (! $validarg{$arg}) { die "ERROR: don't understand argument $rawarg.\n"; }
+			if ($novaluearg{$arg}) {
+				$args{$arg} = 1;
+			} else {
+				# if this CLI arg takes a user-specified value and
+				# we don't already have it, then the user must have
+				# specified with a space, so pull in the next value
+				# from the array as this value rather than as the 
+				# next argument.
+				if ($argvalue eq '') { $argvalue = shift(@args); }
+				$args{$arg} = $argvalue;
+			}
+		} else {
+			# bare arg
+			die "ERROR: don't know what to do with bare argument $rawarg.\n";
+		}
+	}
+
+	# if we aren't checking for usage, 
+	my @missingargs;
+	if (!defined $args{'usage'}) {
+		foreach my $mandarg (@mandatoryargs) {
+			if (! defined $args{$mandarg}) { push @missingargs, $mandarg; }
+		}
+	}	
+	if (scalar @missingargs) { 
+		printusage();
+
+		my $errortext = "ERROR: missing mandatory arguments ";
+		foreach my $missingarg (@missingargs) {
+			$errortext .= "-$missingarg, ";
+		}
+		# trim trailing ", " from errortext
+		$errortext = substr($errortext,0,((length $errortext)-2));
+		die "$errortext\n";
+	}
+
+	# set defaults for undefined non-mandatory arguments
+	# if (!defined $args{'p'}) { $args{'p'} = 0; }
+	$args{'p'} = 0; # progressive throttling is too demanding on the CPU
+	if (!defined $args{'r'}) { $args{'r'} = -1; }
+	if (!defined $args{'t'}) { $args{'t'} = 30; }
+	if (!defined $args{'minp'}) { $args{'minp'} = 50; }
+	if (!defined $args{'maxp'}) { $args{'maxp'} = 100; }
+	if (!defined $args{'jitter'}) { $args{'jitter'} = 0; }
+	return %args;
+}
+
+sub timestamp {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(shift);
+	my @abbr = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+	my $month = $abbr[$mon];
+	$year += 1900;
+	$mon ++;
+
+	$mon = sprintf('%02d',$mon);
+	$mday = sprintf('%02d',$mday);
+	$sec = sprintf('%02d',$sec);
+	$min = sprintf('%02d',$min);
+	$hour = sprintf('%02d',$hour);
+
+	my $timestamp = "$year-$mon-$mday $hour:$min:$sec";
+	return $timestamp;
+}
+
+sub concurrentfetch {
+	# concurrentfetch (10,'http://test.com/128K.bin')
+	# concurrently fetch 10 copies of the URL specified, in parallel,
+	# and return the total amount of data fetched by all 10 children in bits.
+
+	my $concurrency = shift;
+	my $url = shift;
+
+	my @kids;
+
+	# so we can loop from 0 to $concurrency instead of 1 to $concurrency.
+	$concurrency --; 
+
+	# set up variables for OO invocation of HTTP::Tiny
+	my $http = HTTP::Tiny->new(Timeout =>5);
+
+	foreach my $count (0 .. $concurrency) {
+		my $pid = open $kids [$count] => "-|";
+		die "Failed to fork: $!" unless defined $pid;
+		unless ($pid) {
+			# If I'm here, I'm a kid. So do kid stuff.
+
+			# fetch the page
+			my $response;
+			if ($args{'post'}) {
+				$response = $http->post_form($url, $formdata);
+			} else {
+				$response = $http->get($url);
+			}
+			my $page = $response->{content};
+			my $status = $response->{status};
+			my $length = length $page;
+
+			# ANY print from kid will go to parent, to be read by @stuff = <kidPID>
+			print "$length,$status";
+
+			exit; # this kid's job is done, so exit without doing parent stuff that comes next
+		}
+	}
+	# If I made it here, I'm a parent process again.
+
+	# $kids[n] == PID of child process n that we opened above; so <$kids[n]> waits for that PID to close its pipe to us.
+	# this works but it's sort of maybe sucky-ish for netburn because it means the parent will bind waiting for kids[0]
+	# instead of immediately reading kids[1]-kids[5] if kids[0] takes longer to complete.
+
+	my $totalbytesfetched;
+	my $totalkids;
+
+	# not totally ideal, but we're going to return an overall status for the concurrent fetch operation.
+	# we default to 200, but if we encounter any non-200 result, we overwrite it with that. This does mean
+	# that we don't really know the difference between one, several, or ALL non-200 results from kids. Oh well.
+	my $aggregatestatus=200;
+
+	foreach my $fh (@kids) {
+		my @lines = <$fh>;
+		my ($bytes,$status) = split(',',$lines[0]);
+		$totalbytesfetched += $bytes;
+		$totalkids ++;
+		chomp $status;
+		if ($status != 200) { $aggregatestatus = $status; }
+	}
+
+	# "reap the children using wait", whatever the fuck that means? "shouldn't be necessary since we didn't install a signal handler." wonderful.
+	1 while -1 != wait;
+
+	my $totalbitsfetched = $totalbytesfetched*8;
+	return ($totalbitsfetched,$aggregatestatus);
+}
+
+sub getifinfo {
+	# get and return wireless interface information
+	my $if = shift;
+
+	my $text = `/sbin/iwconfig $if 2>/dev/null`;
+	# current iwconfig output format looks like this:
+	#
+	# test0     IEEE 802.11AC  ESSID:"Wirecutter-test"  Nickname:"<WIFI@REALTEK>"
+        #  Mode:Managed  Frequency:5.745 GHz  Access Point: C0:4A:00:0A:AB:C7   
+        #  Bit Rate:867 Mb/s   Sensitivity:0/0  
+        #  Retry:off   RTS thr:off   Fragment thr:off
+        #  Encryption key:****-****-****-****-****-****-****-****   Security mode:open
+        #  Power Management:off
+        #  Link Quality=98/100  Signal level=100/100  Noise level=0/100
+        #  Rx invalid nwid:0  Rx invalid crypt:0  Rx invalid frag:0
+        #  Tx excessive retries:0  Invalid misc:0   Missed beacon:0
+
+	$text =~ s/\r?\n/ /g;
+
+	my $essid = $text;
+	$essid =~ s/^.*ESSID:"//;
+	$essid =~ s/".*$//;
+
+	my $freq = $text;
+	$freq =~ s/^.*Frequency://;
+	$freq =~ s/GHz.*$/GHz/;
+
+	my $bitrate = $text;
+	$bitrate =~ s/^.*Bit Rate://;
+	$bitrate =~ s/ Mb\/s.*$/ Mbps/;
+
+	my $ap = $text;
+	$ap =~ s/^.*Point: //;
+	$ap =~ s/ .*$//;
+
+	my $quality = $text;
+	$quality =~ s/^.*Link Quality=//;
+	$quality =~ s/ .*$//;
+
+	return ($essid,$freq,$ap,$bitrate,$quality);
+}
+
