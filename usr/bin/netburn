@@ -6,6 +6,9 @@
 # from http://www.gnu.org/licenses/gpl-3.0.html on 2014-11-17.  A copy should also be available in this
 # project's Git repository at https://github.com/jimsalterjrs/network-testing/blob/master/LICENSE.
 
+# include snap directory to find Time::HiRes if necessary
+BEGIN {push @INC, '/snap/netburn/current/etc/perl/'}
+
 use strict;
 use Time::HiRes qw ( usleep gettimeofday );
 use HTTP::Tiny;
