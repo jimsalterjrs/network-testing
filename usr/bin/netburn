@@ -84,7 +84,7 @@ my @lengtharray;
 my $throttleperiod = $args{'p'};
 
 # set up variables for OO invocation of HTTP::Tiny, with HTTP timeout at 5 seconds
-my $http = HTTP::Tiny->new (Timeout => 5);
+my $http = HTTP::Tiny->new(timeout => 5);
 my $response;
 
 # There's about a +30ms penalty on the first read of the series, for whatever reason.
@@ -591,7 +591,7 @@ sub concurrentfetch {
 	$concurrency --; 
 
 	# set up variables for OO invocation of HTTP::Tiny
-	my $http = HTTP::Tiny->new(Timeout =>5);
+	my $http = HTTP::Tiny->new(timeout => 5);
 
 	foreach my $count (0 .. $concurrency) {
 		my $pid = open $kids [$count] => "-|";
